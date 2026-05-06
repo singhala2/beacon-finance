@@ -1,58 +1,65 @@
-function BeaconLogo({ size = 24 }: { size?: number }) {
+import { redirect } from 'next/navigation';
+import { auth } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { landingForUser, TOTAL_ONBOARDING_STEPS } from '@/lib/onboard';
+
+export default async function Home() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    redirect('/welcome');
+  }
+
+  const user = await db.user.findUnique({
+    where: { id: session.user.id },
+    select: { firstName: true, name: true, email: true, onboardingStep: true },
+  });
+
+  if (!user) redirect('/welcome');
+
+  if (user.onboardingStep <= TOTAL_ONBOARDING_STEPS) {
+    redirect(landingForUser(user.onboardingStep));
+  }
+
+  // Onboarding complete. Dashboard arrives in Phase 2.
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M12 3 L12 21" stroke="var(--color-mint)" strokeWidth="2" strokeLinecap="round" />
-      <path d="M5 8 Q12 4 19 8" stroke="var(--color-mint)" strokeWidth="1.8" fill="none" strokeLinecap="round" />
-      <path d="M7 12 Q12 9 17 12" stroke="var(--color-mint)" strokeWidth="1.6" fill="none" strokeLinecap="round" />
-      <path d="M9 16 Q12 14 15 16" stroke="var(--color-mint)" strokeWidth="1.4" fill="none" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-export default function Home() {
-  const name = 'Alex';
-
-  return (
-    <main className="flex min-h-screen items-center justify-center px-6">
-      <div className="w-full max-w-xl">
-        <div className="flex items-center gap-3 mb-8">
-          <BeaconLogo size={28} />
-          <span className="text-[14px] font-semibold tracking-tight text-text">Beacon</span>
+    <main
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        background: 'var(--color-bg-0)',
+        color: 'var(--color-text)',
+        fontFamily: 'var(--font-sans)',
+      }}
+    >
+      <div style={{ textAlign: 'center', maxWidth: 480 }}>
+        <div
+          style={{
+            fontSize: 11,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: 0.6,
+            textTransform: 'uppercase',
+            color: 'var(--color-text-dim)',
+            marginBottom: 12,
+          }}
+        >
+          Onboarding complete
         </div>
-
-        <div className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-dim mb-3">
-          phase 0 — foundations
-        </div>
-
-        <h1 className="text-[44px] font-semibold leading-[1.05] tracking-[-0.02em] text-text mb-3">
-          Hello, {name}.
+        <h1
+          style={{
+            fontSize: 32,
+            fontWeight: 600,
+            letterSpacing: -0.8,
+            margin: '0 0 10px',
+          }}
+        >
+          Welcome to Beacon, {user.firstName ?? user.name ?? user.email}.
         </h1>
-
-        <p className="text-[15px] leading-[1.5] text-text-muted mb-10">
-          The design system is loaded. Tokens, fonts, and dark surface scale are wired through Tailwind.
+        <p style={{ fontSize: 15, color: 'var(--color-text-muted)', lineHeight: 1.55, margin: 0 }}>
+          Your dashboard arrives in Phase 2.
         </p>
-
-        <div className="rounded-[var(--radius-lg)] border border-line bg-bg-2 p-5 mb-4">
-          <div className="text-[11px] font-mono uppercase tracking-[0.06em] text-text-dim mb-2">
-            net worth
-          </div>
-          <div className="font-mono text-[32px] font-medium tracking-[-0.02em] text-text mb-1">
-            $284,193
-          </div>
-          <div className="font-mono text-[12px] text-mint">+$3,210 this month</div>
-        </div>
-
-        <div className="flex gap-2">
-          <span className="rounded-[var(--radius-pill)] bg-mint px-3 py-1 text-[11px] font-semibold text-mint-ink">
-            mint
-          </span>
-          <span className="rounded-[var(--radius-pill)] bg-indigo px-3 py-1 text-[11px] font-semibold text-text">
-            indigo
-          </span>
-          <span className="rounded-[var(--radius-pill)] border border-line-2 px-3 py-1 text-[11px] font-semibold text-text-muted">
-            neutral
-          </span>
-        </div>
       </div>
     </main>
   );
