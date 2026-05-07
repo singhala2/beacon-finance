@@ -19,6 +19,7 @@
     ]
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.95.1",
     "@auth/prisma-adapter": "^2.11.2",
     "@prisma/client": "^6.19.3",
     "next": "16.2.5",

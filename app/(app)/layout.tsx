@@ -20,11 +20,20 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     redirect(landingForUser(user.onboardingStep));
   }
 
-  // Account stats for sidebar + topbar
-  const accounts = await db.financialAccount.findMany({
-    where: { userId: session.user.id },
-    select: { lastSyncedAt: true },
-  });
+  // Account stats + recent chats for sidebar/topbar — parallel
+  const [accounts, recentChats] = await Promise.all([
+    db.financialAccount.findMany({
+      where: { userId: session.user.id },
+      select: { lastSyncedAt: true },
+    }),
+    db.conversation.findMany({
+      where: { userId: session.user.id },
+      orderBy: { updatedAt: 'desc' },
+      take: 12,
+      select: { id: true, title: true, updatedAt: true },
+    }),
+  ]);
+
   const accountCount = accounts.length;
   const lastSync = accounts.reduce<Date | null>((latest, a) => {
     if (!latest || a.lastSyncedAt > latest) return a.lastSyncedAt;
@@ -36,6 +45,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       user={{ firstName: user.firstName, name: user.name, email: user.email }}
       accountCount={accountCount}
       syncedAt={lastSync ? lastSync.toISOString() : null}
+      recentChats={recentChats.map((c) => ({
+        id: c.id,
+        title: c.title,
+        updatedAt: c.updatedAt.toISOString(),
+      }))}
     >
       {children}
     </DashboardShell>

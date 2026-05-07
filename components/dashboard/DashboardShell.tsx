@@ -4,16 +4,19 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { DSidebar } from './DSidebar';
 import { DTopbar } from './DTopbar';
 
+export type RecentChat = { id: string; title: string; updatedAt: string };
+
 type Props = {
   user: { firstName: string | null; name: string | null; email: string };
   accountCount: number;
   syncedAt: string | null; // ISO string from server
+  recentChats: RecentChat[];
   children: ReactNode;
 };
 
 const SIDEBAR_KEY = 'beacon.sidebarOpen';
 
-export function DashboardShell({ user, accountCount, syncedAt, children }: Props) {
+export function DashboardShell({ user, accountCount, syncedAt, recentChats, children }: Props) {
   const [open, setOpen] = useState(true);
 
   useEffect(() => {
@@ -42,7 +45,13 @@ export function DashboardShell({ user, accountCount, syncedAt, children }: Props
         overflow: 'hidden',
       }}
     >
-      <DSidebar open={open} onToggle={toggle} user={user} accountCount={accountCount} />
+      <DSidebar
+        open={open}
+        onToggle={toggle}
+        user={user}
+        accountCount={accountCount}
+        recentChats={recentChats}
+      />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <DTopbar

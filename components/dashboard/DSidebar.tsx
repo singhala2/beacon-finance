@@ -17,6 +17,7 @@ import {
   type DashboardNavId,
 } from '@/lib/dashboard';
 import { UserMenu } from './UserMenu';
+import type { RecentChat } from './DashboardShell';
 
 const NAV_ICONS: Record<DashboardNavId, React.ComponentType<{ size?: number; color?: string }>> = {
   home: HomeIcon,
@@ -31,9 +32,10 @@ type Props = {
   onToggle: () => void;
   user: { firstName: string | null; name: string | null; email: string };
   accountCount: number;
+  recentChats: RecentChat[];
 };
 
-export function DSidebar({ open, onToggle, user, accountCount }: Props) {
+export function DSidebar({ open, onToggle, user, accountCount, recentChats }: Props) {
   const pathname = usePathname();
   const activeId = activeNavForPath(pathname);
   const initials = (user.firstName ?? user.name ?? user.email)
@@ -241,13 +243,63 @@ export function DSidebar({ open, onToggle, user, accountCount }: Props) {
           flex: 1,
           minHeight: 0,
           overflow: 'auto',
-          padding: '0 10px',
-          fontSize: 12,
-          color: 'var(--color-text-faint)',
-          fontStyle: 'italic',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
         }}
       >
-        Chat arrives in Phase 3.
+        {recentChats.length === 0 ? (
+          <div
+            style={{
+              padding: '0 10px',
+              fontSize: 12,
+              color: 'var(--color-text-faint)',
+              fontStyle: 'italic',
+            }}
+          >
+            No conversations yet.
+          </div>
+        ) : (
+          recentChats.map((c) => (
+            <Link
+              key={c.id}
+              href={`/chat/${c.id}`}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                padding: '7px 10px',
+                gap: 2,
+                background: pathname === `/chat/${c.id}` ? 'var(--color-bg-3)' : 'transparent',
+                border: 'none',
+                borderRadius: 'var(--radius-sm)',
+                textDecoration: 'none',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12.5,
+                  color: 'var(--color-text-muted)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: 220,
+                }}
+              >
+                {c.title}
+              </span>
+              <span
+                style={{
+                  fontSize: 10.5,
+                  color: 'var(--color-text-faint)',
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >
+                {formatRelativeChatTime(new Date(c.updatedAt))}
+              </span>
+            </Link>
+          ))
+        )}
       </div>
 
       <div
@@ -286,4 +338,27 @@ function iconBtnStyle(): React.CSSProperties {
     justifyContent: 'center',
     color: 'var(--color-text)',
   };
+}
+
+function formatRelativeChatTime(d: Date): string {
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) return 'Today';
+
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate()
+  ) {
+    return 'Yesterday';
+  }
+
+  const diffDays = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+  if (diffDays < 7) return d.toLocaleDateString('en-US', { weekday: 'short' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
