@@ -1,78 +1,276 @@
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { Greeting } from '@/components/dashboard/Greeting';
+import { NetWorthHero } from '@/components/dashboard/NetWorthHero';
+import { AccountsCard } from '@/components/dashboard/AccountsCard';
+import { GoalsCard } from '@/components/dashboard/GoalsCard';
+import { InvestmentsCard } from '@/components/dashboard/InvestmentsCard';
+import { AllocationCard } from '@/components/dashboard/AllocationCard';
+import { DebtCard } from '@/components/dashboard/DebtCard';
+import { CashFlowCard } from '@/components/dashboard/CashFlowCard';
+import { SpendingCard, type CategorySpend } from '@/components/dashboard/SpendingCard';
+import { ActivityCard, type TransactionRow } from '@/components/dashboard/ActivityCard';
+import { TransactionSyncOnMount } from '@/components/dashboard/TransactionSyncOnMount';
+import { AskBar } from '@/components/dashboard/AskBar';
+import { BeaconsBrief } from '@/components/dashboard/BeaconsBrief';
+import { generateBriefs } from '@/lib/insights';
+import { formatCurrency } from '@/lib/format';
+
+type AllocationBucket = 'stocks' | 'bonds' | 'cash' | 'crypto' | 'other';
+
+function bucketForHoldingType(type: string): AllocationBucket {
+  switch (type) {
+    case 'equity':
+    case 'etf':
+    case 'mutual_fund':
+      return 'stocks';
+    case 'bond':
+      return 'bonds';
+    case 'cash':
+      return 'cash';
+    case 'crypto':
+      return 'crypto';
+    default:
+      return 'other';
+  }
+}
+
+function buildInsightLine(netWorth: number, accountCount: number, holdingsValue: number): string {
+  if (accountCount === 0) {
+    return 'Connect an account to start. Beacon will read what you have and start building a picture.';
+  }
+  if (holdingsValue > 0 && netWorth > 0) {
+    const investedShare = Math.round((holdingsValue / netWorth) * 100);
+    return `Roughly ${investedShare}% of your net worth is invested. As Beacon learns your spend pattern, it will tune contribution suggestions.`;
+  }
+  return 'Beacon is reading your accounts. Insights on cash flow and idle balances arrive as transactions sync in.';
+}
+
+function startOfMonth(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
+}
+
+// Categories we exclude from "spending" since they're internal money movement,
+// not real expense behavior.
+const EXCLUDED_SPEND_CATEGORIES = new Set(['TRANSFER_IN', 'TRANSFER_OUT', 'INCOME', 'LOAN_PAYMENTS']);
 
 export default async function DashboardHome() {
   const session = await auth();
-  // Layout has already validated, but TS needs the narrow.
   if (!session?.user?.id) return null;
+  const userId = session.user.id;
 
-  const user = await db.user.findUnique({
-    where: { id: session.user.id },
-    select: { firstName: true, email: true },
-  });
+  const now = new Date();
+  const currentMonthStart = startOfMonth(now);
+  const priorMonthStart = startOfMonth(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
+
+  // Parallel-fetch the dashboard data set
+  const [user, accounts, holdings, goals, transactionCount, monthTxs, recentTxs] = await Promise.all([
+    db.user.findUnique({
+      where: { id: userId },
+      select: { firstName: true, email: true },
+    }),
+    db.financialAccount.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        institution: true,
+        name: true,
+        mask: true,
+        type: true,
+        subtype: true,
+        balanceCurrent: true,
+        currency: true,
+      },
+    }),
+    db.holding.findMany({
+      where: { account: { userId } },
+      select: {
+        id: true,
+        symbol: true,
+        name: true,
+        currentValue: true,
+        type: true,
+      },
+    }),
+    db.goal.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        name: true,
+        type: true,
+        targetAmount: true,
+        targetDate: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+    db.transaction.count({ where: { userId } }),
+    // Current + prior month for cash flow + spending aggregates
+    db.transaction.findMany({
+      where: { userId, date: { gte: priorMonthStart } },
+      select: { amount: true, date: true, category: true, pending: true },
+    }),
+    // Recent activity (settled or pending — they show inline)
+    db.transaction.findMany({
+      where: { userId },
+      orderBy: { date: 'desc' },
+      take: 5,
+      include: { account: { select: { institution: true } } },
+    }),
+  ]);
+
   if (!user) return null;
+
+  // Trigger a background sync if accounts are connected but no transactions exist yet.
+  const needsInitialSync = accounts.length > 0 && transactionCount === 0;
+
+  // Net worth: depository + investment - credit
+  const netWorth = accounts.reduce((sum, a) => {
+    const bal = a.balanceCurrent ?? 0;
+    return sum + (a.type === 'credit' ? -Math.abs(bal) : bal);
+  }, 0);
+  const debtTotal = accounts
+    .filter((a) => a.type === 'credit')
+    .reduce((sum, a) => sum + Math.abs(a.balanceCurrent ?? 0), 0);
+
+  // Allocation: sum holdings by bucket, normalize to fractions
+  const allocationRaw: Record<AllocationBucket, number> = {
+    stocks: 0, bonds: 0, cash: 0, crypto: 0, other: 0,
+  };
+  for (const h of holdings) {
+    allocationRaw[bucketForHoldingType(h.type)] += h.currentValue;
+  }
+  const totalHoldings = Object.values(allocationRaw).reduce((a, b) => a + b, 0);
+  const allocation: Record<AllocationBucket, number> = totalHoldings > 0
+    ? {
+        stocks: allocationRaw.stocks / totalHoldings,
+        bonds: allocationRaw.bonds / totalHoldings,
+        cash: allocationRaw.cash / totalHoldings,
+        crypto: allocationRaw.crypto / totalHoldings,
+        other: allocationRaw.other / totalHoldings,
+      }
+    : allocationRaw;
+
+  // Cash flow aggregate (skip pending — they double-count when they settle)
+  const periods = { current: { income: 0, expenses: 0, net: 0 }, prior: { income: 0, expenses: 0, net: 0 } };
+  for (const t of monthTxs) {
+    if (t.pending) continue;
+    const bucket = t.date >= currentMonthStart ? periods.current : periods.prior;
+    if (t.amount < 0) bucket.income += -t.amount;
+    else bucket.expenses += t.amount;
+  }
+  periods.current.net = periods.current.income - periods.current.expenses;
+  periods.prior.net = periods.prior.income - periods.prior.expenses;
+
+  // Spending by category, current vs. prior month
+  const byCategoryCurrent = new Map<string, number>();
+  const byCategoryPrior = new Map<string, number>();
+  for (const t of monthTxs) {
+    if (t.pending || t.amount <= 0) continue;
+    if (t.category && EXCLUDED_SPEND_CATEGORIES.has(t.category)) continue;
+    const map = t.date >= currentMonthStart ? byCategoryCurrent : byCategoryPrior;
+    const key = t.category ?? 'UNCATEGORIZED';
+    map.set(key, (map.get(key) ?? 0) + t.amount);
+  }
+  const categoriesAll = new Set([...byCategoryCurrent.keys(), ...byCategoryPrior.keys()]);
+  const categories: CategorySpend[] = Array.from(categoriesAll)
+    .map((cat) => ({
+      category: cat,
+      thisMonth: byCategoryCurrent.get(cat) ?? 0,
+      lastMonth: byCategoryPrior.get(cat) ?? 0,
+    }))
+    .sort((a, b) => b.thisMonth - a.thisMonth);
+
+  // Recent activity: shape transactions for the card
+  const activity: TransactionRow[] = recentTxs.map((t) => ({
+    id: t.id,
+    date: t.date,
+    amount: t.amount,
+    currency: t.currency,
+    name: t.name,
+    merchantName: t.merchantName,
+    category: t.category,
+    pending: t.pending,
+    accountInstitution: t.account.institution,
+  }));
+
+  const creditAccounts = accounts.filter((a) => a.type === 'credit');
+  const insightLine = buildInsightLine(netWorth, accounts.length, totalHoldings);
+
+  const monthLabel = now.toLocaleDateString('en-US', { month: 'long' });
+
+  const currentMonthTxs = monthTxs.filter((t) => t.date >= currentMonthStart);
+  const priorMonthTxs = monthTxs.filter((t) => t.date < currentMonthStart);
+  const briefs = generateBriefs({
+    accounts,
+    currentMonthTxs,
+    priorMonthTxs,
+    goals: goals.map((g) => ({
+      name: g.name,
+      targetAmount: g.targetAmount,
+      targetDate: g.targetDate,
+    })),
+  });
 
   return (
     <>
+      {needsInitialSync && <TransactionSyncOnMount />}
       <Greeting
         firstName={user.firstName}
         email={user.email}
-        subline="Cards land in milestones 2B–2E."
+        subline={
+          accounts.length > 0
+            ? `Tracking ${formatCurrency(netWorth, { maximumFractionDigits: 0 })} across ${accounts.length} account${accounts.length === 1 ? '' : 's'}.`
+            : undefined
+        }
       />
 
-      {/* Placeholder card grid — populated in 2B onward */}
+      <div style={{ marginTop: 8, marginBottom: 16 }}>
+        <NetWorthHero
+          netWorth={netWorth}
+          accountCount={accounts.length}
+          debtTotal={debtTotal}
+          insightLine={insightLine}
+        />
+      </div>
+
+      <AskBar />
+
+      <BeaconsBrief briefs={briefs} />
+
       <div
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(12, 1fr)',
           gap: 12,
-          marginTop: 16,
         }}
       >
-        <CardSkeleton span={12} height={220} label="Net worth · 2B" />
-        <CardSkeleton span={4} height={160} label="Cash flow · 2D" />
-        <CardSkeleton span={4} height={160} label="Spending · 2D" />
-        <CardSkeleton span={4} height={160} label="Investments · 2B" />
-        <CardSkeleton span={6} height={180} label="Goals · 2B" />
-        <CardSkeleton span={3} height={180} label="Debt · 2B" />
-        <CardSkeleton span={3} height={180} label="Allocation · 2B" />
-        <CardSkeleton span={6} height={160} label="Activity · 2D" />
-        <CardSkeleton span={6} height={160} label="Beacon's brief · 2E" />
+        <div style={{ gridColumn: 'span 4' }}>
+          <CashFlowCard current={periods.current} prior={periods.prior} monthLabel={monthLabel} />
+        </div>
+        <div style={{ gridColumn: 'span 4' }}>
+          <SpendingCard categories={categories} />
+        </div>
+        <div style={{ gridColumn: 'span 4' }}>
+          <InvestmentsCard holdings={holdings} />
+        </div>
+
+        <div style={{ gridColumn: 'span 6' }}>
+          <AccountsCard accounts={accounts} />
+        </div>
+        <div style={{ gridColumn: 'span 6' }}>
+          <GoalsCard goals={goals} />
+        </div>
+
+        <div style={{ gridColumn: 'span 6' }}>
+          <ActivityCard transactions={activity} />
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <AllocationCard allocation={allocation} />
+        </div>
+        <div style={{ gridColumn: 'span 3' }}>
+          <DebtCard creditAccounts={creditAccounts} />
+        </div>
       </div>
     </>
-  );
-}
-
-function CardSkeleton({
-  span,
-  height,
-  label,
-}: {
-  span: number;
-  height: number;
-  label: string;
-}) {
-  return (
-    <div
-      style={{
-        gridColumn: `span ${span}`,
-        height,
-        background: 'var(--color-bg-2)',
-        border: '1px dashed var(--color-line)',
-        borderRadius: 'var(--radius-lg)',
-        padding: 16,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--color-text-dim)',
-        fontSize: 12,
-        fontFamily: 'var(--font-mono)',
-        letterSpacing: 0.4,
-        textTransform: 'uppercase',
-      }}
-    >
-      {label}
-    </div>
   );
 }

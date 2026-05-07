@@ -22,10 +22,10 @@ Each is independently shippable. Commit and push after each.
 | #  | Milestone | Acceptance | Status |
 |----|-----------|------------|--------|
 | 2A | Dashboard shell — sidebar, topbar, greeting, route group | Signed-in user with completed onboarding lands on a real dashboard frame. Cards are placeholder skeletons. | ✅ done |
-| 2B | Static-data cards — Hero (net worth), Accounts, Goals, Investments, Allocation, Debt | Each card renders real numbers computed from existing DB tables. Empty + loading states wired. | not started |
-| 2C | Plaid transactions sync — schema + sync route + first-load trigger | New `Transaction` rows persisted for all `PlaidItem`s, scoped to last 90 days. | not started |
-| 2D | Transaction-powered cards — CashFlow, Activity, Spending | Cards show real income/expense, last 5 transactions, category breakdown. | not started |
-| 2E | Beacon's Brief + AskBar + polish — hardcoded insights, chat entry-point, skeletons, empty states | Brief shows 3 data-driven insights. AskBar input routes to `/chat` placeholder (real chat in Phase 3). | not started |
+| 2B | Static-data cards — Hero (net worth), Accounts, Goals, Investments, Allocation, Debt | Each card renders real numbers computed from existing DB tables. Empty + loading states wired. | ✅ done |
+| 2C | Plaid transactions sync — schema + sync route + first-load trigger | New `Transaction` rows persisted for all `PlaidItem`s, scoped to last 90 days. | ✅ done |
+| 2D | Transaction-powered cards — CashFlow, Activity, Spending | Cards show real income/expense, last 5 transactions, category breakdown. | ✅ done |
+| 2E | Beacon's Brief + AskBar + polish — hardcoded insights, chat entry-point, skeletons, empty states | Brief shows 3 data-driven insights. AskBar input routes to `/chat` placeholder (real chat in Phase 3). | ✅ done |
 
 Sub-cards from the prototype that do **not** ship in Phase 2: `SubsCard` (recurring-charge detection) and `RunwayCard` (months-of-runway calculation) — both deferred to Phase 5 polish. The card grid shows "+ Add card" placeholders for them in customize mode (Phase 4).
 

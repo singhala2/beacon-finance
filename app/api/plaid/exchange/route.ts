@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { plaid } from '@/lib/plaid';
 import { encrypt } from '@/lib/encryption';
+import { syncTransactionsForUser } from '@/lib/transactions';
 
 const BodySchema = z.object({
   publicToken: z.string().min(1),
@@ -125,6 +126,14 @@ export async function POST(req: Request) {
         });
       }),
     );
+  }
+
+  // Initial transaction sync so the dashboard has data on first load. Failures
+  // here are non-fatal; the dashboard auto-sync will retry.
+  try {
+    await syncTransactionsForUser(session.user.id);
+  } catch (err) {
+    console.error('Initial transaction sync failed:', err);
   }
 
   // Advance onboarding step if still at step 1
