@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BBtn, BInput, ArrowIcon } from '@/components/ui';
+import { BBtn, BInput, ArrowIcon, StepHeader } from '@/components/ui';
+import { advanceOnboardingStep } from '@/lib/onboard-client';
 
 type Initial = {
   firstName: string | null;
@@ -26,30 +27,26 @@ export function ProfileStep({ initial }: { initial: Initial }) {
       return;
     }
 
-    const ageNum = age.trim() ? Number.parseInt(age, 10) : null;
-    if (age.trim() && (Number.isNaN(ageNum) || ageNum! < 13 || ageNum! > 120)) {
-      setError('Enter a valid age between 13 and 120.');
-      return;
+    let ageNum: number | null = null;
+    if (age.trim()) {
+      const parsed = Number.parseInt(age, 10);
+      if (Number.isNaN(parsed) || parsed < 13 || parsed > 120) {
+        setError('Enter a valid age between 13 and 120.');
+        return;
+      }
+      ageNum = parsed;
     }
 
     startTransition(async () => {
-      const res = await fetch('/api/onboard', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          step: 1,
-          firstName: firstName.trim(),
-          age: ageNum,
-          location: location.trim() || null,
-        }),
+      const res = await advanceOnboardingStep(1, {
+        firstName: firstName.trim(),
+        age: ageNum,
+        location: location.trim() || null,
       });
-
       if (!res.ok) {
-        const j = (await res.json().catch(() => null)) as { error?: string } | null;
-        setError(j?.error ?? 'Could not save. Try again.');
+        setError(res.error ?? null);
         return;
       }
-
       router.push('/onboard/2');
       router.refresh();
     });
@@ -57,27 +54,11 @@ export function ProfileStep({ initial }: { initial: Initial }) {
 
   return (
     <div style={{ maxWidth: 540, width: '100%', display: 'flex', flexDirection: 'column' }}>
-      <h1
-        style={{
-          fontSize: 32,
-          fontWeight: 600,
-          letterSpacing: -0.8,
-          margin: '0 0 8px',
-          lineHeight: 1.15,
-        }}
-      >
-        Let's get to know you.
-      </h1>
-      <p
-        style={{
-          fontSize: 15,
-          color: 'var(--color-text-muted)',
-          lineHeight: 1.55,
-          margin: '0 0 28px',
-        }}
-      >
-        Just the basics. Age and location are optional.
-      </p>
+      <StepHeader
+        size="xl"
+        title="Let's get to know you."
+        body="Just the basics. Age and location are optional."
+      />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <FieldLabel>First name</FieldLabel>

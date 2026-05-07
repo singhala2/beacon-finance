@@ -10,6 +10,7 @@ import { RiskStep } from '@/components/onboard/RiskStep';
 import { AuditStep } from '@/components/onboard/AuditStep';
 import { parseStepParam, previousStep, type OnboardingStep } from '@/lib/onboard';
 import type { ConnectedAccount } from '@/components/plaid/PlaidLinkButton';
+import { CheckIcon, Eyebrow } from '@/components/ui';
 
 type LeftCopy = { eyebrow?: string; heading: string; body: string };
 
@@ -130,17 +131,8 @@ export default async function OnboardStepPage({
       left={
         <div>
           {copy.eyebrow && (
-            <div
-              style={{
-                fontSize: 11,
-                color: 'var(--color-mint)',
-                fontFamily: 'var(--font-mono)',
-                letterSpacing: 0.6,
-                textTransform: 'uppercase',
-                marginBottom: 16,
-              }}
-            >
-              {copy.eyebrow}
+            <div style={{ marginBottom: 16 }}>
+              <Eyebrow color="var(--color-mint)">{copy.eyebrow}</Eyebrow>
             </div>
           )}
           <h2
@@ -181,7 +173,9 @@ export default async function OnboardStepPage({
                     color: 'var(--color-text-muted)',
                   }}
                 >
-                  <span style={{ color: 'var(--color-mint)', marginTop: 1 }}>✓</span>
+                  <span style={{ display: 'inline-flex', marginTop: 2 }}>
+                    <CheckIcon size={12} color="var(--color-mint)" />
+                  </span>
                   <span>{s}</span>
                 </div>
               ))}
@@ -229,7 +223,6 @@ function renderStep(
       return (
         <AuditStep
           data={{
-            firstName: user.firstName,
             netWorth: audit.netWorth,
             accountCount: audit.accountCount,
             debtTotal: audit.debtTotal,

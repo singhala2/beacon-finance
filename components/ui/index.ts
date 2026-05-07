@@ -1,10 +1,9 @@
 export { BeaconLogo } from './BeaconLogo';
-export { BeaconWordmark } from './BeaconWordmark';
 export { BBtn } from './BBtn';
-export { BCard } from './BCard';
 export { BChip } from './BChip';
 export { BInput } from './BInput';
-export { BStepDots } from './BStepDots';
 export { BChatBubble } from './BChatBubble';
 export { Sparkline } from './Sparkline';
+export { Eyebrow } from './Eyebrow';
+export { StepHeader } from './StepHeader';
 export * from './Icon';

@@ -1,14 +1,14 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { BBtn, ArrowIcon, SparkleIcon } from '@/components/ui';
+import { BBtn, ArrowIcon, SparkleIcon, Eyebrow } from '@/components/ui';
+import { advanceOnboardingStep } from '@/lib/onboard-client';
+import { formatCurrency } from '@/lib/format';
 
 type Goal = { name: string; type: string };
 
 type AuditData = {
-  firstName: string | null;
   netWorth: number;
   accountCount: number;
   debtTotal: number;
@@ -38,14 +38,6 @@ const RISK_LABELS: Record<number, string> = {
   4: 'Growth',
   5: 'Aggressive',
 };
-
-function fmt(n: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(n);
-}
 
 function buildFindings(data: AuditData): Finding[] {
   const findings: Finding[] = [];
@@ -92,11 +84,7 @@ export function AuditStep({ data }: Props) {
 
   function finish() {
     startTransition(async () => {
-      await fetch('/api/onboard', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ step: 6, onboardingContext: context.trim() || undefined }),
-      });
+      await advanceOnboardingStep(6, { onboardingContext: context.trim() || undefined });
       router.push('/');
       router.refresh();
     });
@@ -116,18 +104,7 @@ export function AuditStep({ data }: Props) {
             padding: 20,
           }}
         >
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--color-text-dim)',
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: 0.6,
-              textTransform: 'uppercase',
-              marginBottom: 6,
-            }}
-          >
-            Net worth
-          </div>
+          <Eyebrow style={{ marginBottom: 6 }}>Net worth</Eyebrow>
           <div
             style={{
               fontSize: 30,
@@ -136,11 +113,11 @@ export function AuditStep({ data }: Props) {
               color: data.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-warn)',
             }}
           >
-            {fmt(data.netWorth)}
+            {formatCurrency(data.netWorth, { maximumFractionDigits: 0 })}
           </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             {data.accountCount} account{data.accountCount === 1 ? '' : 's'}
-            {data.debtTotal > 0 ? ` · ${fmt(data.debtTotal)} in debt` : ''}
+            {data.debtTotal > 0 ? ` · ${formatCurrency(data.debtTotal, { maximumFractionDigits: 0 })} in debt` : ''}
           </div>
         </div>
 
@@ -152,18 +129,7 @@ export function AuditStep({ data }: Props) {
             padding: 20,
           }}
         >
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--color-text-dim)',
-              fontFamily: 'var(--font-mono)',
-              letterSpacing: 0.6,
-              textTransform: 'uppercase',
-              marginBottom: 6,
-            }}
-          >
-            Risk profile
-          </div>
+          <Eyebrow style={{ marginBottom: 6 }}>Risk profile</Eyebrow>
           <div
             style={{
               fontSize: 30,
@@ -172,7 +138,7 @@ export function AuditStep({ data }: Props) {
               color: 'var(--color-mint)',
             }}
           >
-            {data.riskTolerance ? RISK_LABELS[data.riskTolerance] ?? '—' : '—'}
+            {data.riskTolerance ? RISK_LABELS[data.riskTolerance] ?? 'Not set' : 'Not set'}
           </div>
           <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 4 }}>
             {data.goals.length} goal{data.goals.length === 1 ? '' : 's'} set
@@ -181,18 +147,9 @@ export function AuditStep({ data }: Props) {
       </div>
 
       {/* Findings */}
-      <div
-        style={{
-          fontSize: 11,
-          color: 'var(--color-text-dim)',
-          fontFamily: 'var(--font-mono)',
-          letterSpacing: 0.6,
-          textTransform: 'uppercase',
-          marginBottom: 10,
-        }}
-      >
+      <Eyebrow style={{ marginBottom: 10 }}>
         {findings.length} things to act on first
-      </div>
+      </Eyebrow>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {findings.map((f, i) => (
@@ -266,18 +223,7 @@ export function AuditStep({ data }: Props) {
           borderRadius: 'var(--radius-md)',
         }}
       >
-        <div
-          style={{
-            fontSize: 11,
-            color: 'var(--color-text-dim)',
-            fontFamily: 'var(--font-mono)',
-            letterSpacing: 0.5,
-            textTransform: 'uppercase',
-            marginBottom: 8,
-          }}
-        >
-          Anything Beacon should know?
-        </div>
+        <Eyebrow style={{ marginBottom: 8 }}>Anything Beacon should know?</Eyebrow>
         <textarea
           placeholder="e.g. inheritance coming next year, planning to switch jobs, starting a business..."
           value={context}

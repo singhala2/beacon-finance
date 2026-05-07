@@ -17,7 +17,9 @@ export function BChip({ children, selected, leading, style, ...rest }: Props) {
         alignItems: 'center',
         gap: 6,
         padding: '8px 14px',
-        background: selected ? 'oklch(0.82 0.14 165 / 0.12)' : 'var(--color-bg-3)',
+        background: selected
+          ? 'color-mix(in oklab, var(--color-mint) 12%, transparent)'
+          : 'var(--color-bg-3)',
         color: selected ? 'var(--color-mint)' : 'var(--color-text)',
         border: `1px solid ${selected ? 'var(--color-mint)' : 'var(--color-line)'}`,
         borderRadius: 'var(--radius-pill)',

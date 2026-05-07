@@ -3,7 +3,10 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlaidLinkButton, type ConnectedAccount } from '@/components/plaid/PlaidLinkButton';
-import { BBtn, ArrowIcon, CheckIcon, SparkleIcon } from '@/components/ui';
+import { PlaidConnectCard } from '@/components/plaid/PlaidConnectCard';
+import { BBtn, ArrowIcon, CheckIcon, SparkleIcon, StepHeader } from '@/components/ui';
+import { advanceOnboardingStep } from '@/lib/onboard-client';
+import { formatCurrency } from '@/lib/format';
 
 type Props = {
   initial: ConnectedAccount[];
@@ -11,15 +14,9 @@ type Props = {
 
 type InvestmentAccount = ConnectedAccount & { selected: boolean };
 
-function fmt(n: number | null, currency = 'USD'): string {
-  if (n === null) return '—';
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
-}
-
 export function InvestmentsStep({ initial }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-
   const [accounts, setAccounts] = useState<InvestmentAccount[]>(
     initial.map((a) => ({ ...a, selected: true })),
   );
@@ -43,40 +40,18 @@ export function InvestmentsStep({ initial }: Props) {
 
   function advance() {
     startTransition(async () => {
-      await fetch('/api/onboard', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ step: 3 }),
-      });
+      await advanceOnboardingStep(3);
       router.push('/onboard/4');
       router.refresh();
     });
   }
 
-  const plaidBtnStyle: React.CSSProperties = {
-    width: '100%',
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    padding: 0,
-  };
-
   return (
     <div style={{ maxWidth: 540, width: '100%' }}>
-      <h1
-        style={{
-          fontSize: 28,
-          fontWeight: 600,
-          letterSpacing: -0.7,
-          margin: '0 0 6px',
-          lineHeight: 1.15,
-        }}
-      >
-        Investments and retirement
-      </h1>
-      <p style={{ color: 'var(--color-text-muted)', margin: '0 0 20px', fontSize: 15, lineHeight: 1.55 }}>
-        {isConnected ? 'Select the accounts to include.' : 'Connect each institution you invest with.'}
-      </p>
+      <StepHeader
+        title="Investments and retirement"
+        body={isConnected ? 'Select the accounts to include.' : 'Connect each institution you invest with.'}
+      />
 
       {isConnected ? (
         /* Connected state: show selectable cards */
@@ -146,7 +121,10 @@ export function InvestmentsStep({ initial }: Props) {
                 </div>
               </div>
               <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: -0.4 }}>
-                {fmt(a.balanceCurrent, a.currency)}
+                {formatCurrency(a.balanceCurrent, {
+                  currency: a.currency,
+                  maximumFractionDigits: 0,
+                })}
               </div>
               <div style={{ marginTop: 4, fontSize: 11, color: 'var(--color-text-dim)' }}>
                 {a.name}
@@ -155,52 +133,22 @@ export function InvestmentsStep({ initial }: Props) {
           ))}
         </div>
       ) : (
-        /* Empty state: prominent Plaid connect */
-        <div
-          style={{
-            background: 'linear-gradient(180deg, var(--color-bg-2), var(--color-bg-1))',
-            border: '1px solid var(--color-line)',
-            borderRadius: 'var(--radius-lg)',
-            padding: '20px 22px',
-            marginBottom: 14,
-          }}
-        >
-          <PlaidLinkButton onSuccess={handlePlaidSuccess} style={plaidBtnStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div
-                style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 11,
-                  background: 'var(--color-bg-3)',
-                  border: '1px solid var(--color-line)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  fontFamily: 'var(--font-mono)',
-                  letterSpacing: 0.6,
-                  flexShrink: 0,
-                }}
-              >
-                plaid
-              </div>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>Connect investment accounts</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-                  Fidelity, Vanguard, Schwab, Robinhood, Coinbase...
-                </div>
-              </div>
-            </div>
-          </PlaidLinkButton>
+        <div style={{ marginBottom: 14 }}>
+          <PlaidConnectCard
+            title="Connect investment accounts"
+            subline="Fidelity, Vanguard, Schwab, Robinhood, Coinbase..."
+            onSuccess={handlePlaidSuccess}
+          />
         </div>
       )}
 
       {/* Add another institution when already connected */}
       {isConnected && (
         <div style={{ marginBottom: 14 }}>
-          <PlaidLinkButton onSuccess={handlePlaidSuccess} style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}>
+          <PlaidLinkButton
+            onSuccess={handlePlaidSuccess}
+            style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+          >
             <div
               style={{
                 width: '100%',
@@ -221,7 +169,6 @@ export function InvestmentsStep({ initial }: Props) {
         </div>
       )}
 
-      {/* AI insight hint — shown when connected */}
       {isConnected && (
         <div
           style={{
@@ -243,9 +190,7 @@ export function InvestmentsStep({ initial }: Props) {
         </div>
       )}
 
-      {!isConnected && (
-        <div style={{ height: 22 }} />
-      )}
+      {!isConnected && <div style={{ height: 22 }} />}
 
       <div style={{ display: 'flex', gap: 12 }}>
         <BBtn

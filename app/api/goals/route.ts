@@ -18,7 +18,8 @@ const BodySchema = z.object({
 // Replaces all goals for the user in one shot (onboarding use case).
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) {
+  const userId = session?.user?.id;
+  if (!userId) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
   }
 
@@ -29,10 +30,10 @@ export async function POST(req: Request) {
   }
 
   await db.$transaction([
-    db.goal.deleteMany({ where: { userId: session.user.id } }),
+    db.goal.deleteMany({ where: { userId } }),
     db.goal.createMany({
       data: parsed.data.goals.map((g) => ({
-        userId: session.user.id!,
+        userId,
         name: g.name,
         type: g.type,
         targetAmount: g.targetAmount ?? null,

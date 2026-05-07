@@ -1,6 +1,10 @@
 import { Configuration, PlaidApi, PlaidEnvironments, Products, CountryCode } from 'plaid';
 
+let cached: PlaidApi | null = null;
+
 function getClient(): PlaidApi {
+  if (cached) return cached;
+
   const clientId = process.env.PLAID_CLIENT_ID;
   const secret = process.env.PLAID_SECRET;
   const env = process.env.PLAID_ENV ?? 'sandbox';
@@ -17,13 +21,17 @@ function getClient(): PlaidApi {
     },
   });
 
-  return new PlaidApi(config);
+  cached = new PlaidApi(config);
+  return cached;
 }
 
+// Lazy-initialized accessor. Methods call into the real client on demand so
+// that env vars are validated at the first request, not at import time.
 export const plaid = new Proxy({} as PlaidApi, {
   get(_target, prop) {
     const client = getClient();
-    return (client[prop as keyof PlaidApi] as Function).bind(client);
+    const value = client[prop as keyof PlaidApi];
+    return typeof value === 'function' ? value.bind(client) : value;
   },
 });
 

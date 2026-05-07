@@ -2,8 +2,18 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BBtn, ArrowIcon, CheckIcon, HomeIcon, RetireIcon, EmergencyIcon, TravelIcon, PlusIcon } from '@/components/ui';
-import { BChatBubble } from '@/components/ui';
+import {
+  BBtn,
+  ArrowIcon,
+  CheckIcon,
+  HomeIcon,
+  RetireIcon,
+  EmergencyIcon,
+  TravelIcon,
+  PlusIcon,
+  BChatBubble,
+} from '@/components/ui';
+import { advanceOnboardingStep } from '@/lib/onboard-client';
 
 type GoalType = 'emergency' | 'house' | 'retirement' | 'debt' | 'travel' | 'custom';
 
@@ -56,12 +66,7 @@ export function GoalsStep() {
         });
       }
 
-      await fetch('/api/onboard', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ step: 4 }),
-      });
-
+      await advanceOnboardingStep(4);
       router.push('/onboard/5');
       router.refresh();
     });

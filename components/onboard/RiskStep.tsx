@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { BBtn, ArrowIcon } from '@/components/ui';
+import { BBtn, ArrowIcon, StepHeader } from '@/components/ui';
+import { advanceOnboardingStep } from '@/lib/onboard-client';
 
 type Level = {
   label: string;
@@ -77,11 +78,7 @@ export function RiskStep({ initial }: Props) {
 
   function advance() {
     startTransition(async () => {
-      await fetch('/api/onboard', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ step: 5, riskTolerance: selected + 1 }),
-      });
+      await advanceOnboardingStep(5, { riskTolerance: selected + 1 });
       router.push('/onboard/6');
       router.refresh();
     });
@@ -89,20 +86,10 @@ export function RiskStep({ initial }: Props) {
 
   return (
     <div style={{ maxWidth: 540, width: '100%' }}>
-      <h1
-        style={{
-          fontSize: 28,
-          fontWeight: 600,
-          letterSpacing: -0.7,
-          margin: '0 0 6px',
-          lineHeight: 1.15,
-        }}
-      >
-        Risk preferences
-      </h1>
-      <p style={{ color: 'var(--color-text-muted)', margin: '0 0 22px', fontSize: 15, lineHeight: 1.55 }}>
-        Click to adjust. We will suggest a portfolio mix.
-      </p>
+      <StepHeader
+        title="Risk preferences"
+        body="Click to adjust. We will suggest a portfolio mix."
+      />
 
       {/* Bar chart */}
       <div
