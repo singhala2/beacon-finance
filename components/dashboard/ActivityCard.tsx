@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 import { formatCurrency, formatTransactionDate, labelForCategory } from '@/lib/format';
 
 export type TransactionRow = {
@@ -41,9 +41,9 @@ export function ActivityCard({ transactions }: Props) {
         }
       />
       {isEmpty ? (
-        <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '8px 0', lineHeight: 1.5 }}>
+        <CardEmptyState>
           No transactions yet. They will appear once Plaid finishes its initial pull.
-        </div>
+        </CardEmptyState>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {top.map((t) => {

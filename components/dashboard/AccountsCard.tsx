@@ -1,4 +1,4 @@
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 import { formatCurrency } from '@/lib/format';
 
 export type AccountRow = {
@@ -33,16 +33,7 @@ export function AccountsCard({ accounts }: Props) {
         }
       />
       {top.length === 0 ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: 'var(--color-text-muted)',
-            padding: '8px 0',
-            lineHeight: 1.5,
-          }}
-        >
-          No accounts connected.
-        </div>
+        <CardEmptyState>No accounts connected.</CardEmptyState>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {top.map((a) => {

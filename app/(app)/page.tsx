@@ -1,7 +1,6 @@
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { Greeting } from '@/components/dashboard/Greeting';
-import { NetWorthHero } from '@/components/dashboard/NetWorthHero';
 import { AccountsCard } from '@/components/dashboard/AccountsCard';
 import { GoalsCard } from '@/components/dashboard/GoalsCard';
 import { InvestmentsCard } from '@/components/dashboard/InvestmentsCard';
@@ -13,8 +12,11 @@ import { ActivityCard, type TransactionRow } from '@/components/dashboard/Activi
 import { TransactionSyncOnMount } from '@/components/dashboard/TransactionSyncOnMount';
 import { AskBar } from '@/components/dashboard/AskBar';
 import { BeaconsBrief } from '@/components/dashboard/BeaconsBrief';
+import { DashboardCustomizer } from '@/components/dashboard/DashboardCustomizer';
 import { generateBriefs } from '@/lib/insights';
 import { formatCurrency } from '@/lib/format';
+import { resolveLayout, DEFAULT_LAYOUT, type CardId } from '@/lib/dashboard-layout';
+import type { ReactNode } from 'react';
 
 type AllocationBucket = 'stocks' | 'bonds' | 'cash' | 'crypto' | 'other';
 
@@ -50,11 +52,16 @@ function startOfMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
 
-// Categories we exclude from "spending" since they're internal money movement,
-// not real expense behavior.
 const EXCLUDED_SPEND_CATEGORIES = new Set(['TRANSFER_IN', 'TRANSFER_OUT', 'INCOME', 'LOAN_PAYMENTS']);
 
-export default async function DashboardHome() {
+type Props = {
+  searchParams: Promise<{ edit?: string }>;
+};
+
+export default async function DashboardHome({ searchParams }: Props) {
+  const sp = await searchParams;
+  const editing = sp.edit === '1';
+
   const session = await auth();
   if (!session?.user?.id) return null;
   const userId = session.user.id;
@@ -63,11 +70,10 @@ export default async function DashboardHome() {
   const currentMonthStart = startOfMonth(now);
   const priorMonthStart = startOfMonth(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
 
-  // Parallel-fetch the dashboard data set
   const [user, accounts, holdings, goals, transactionCount, monthTxs, recentTxs] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
-      select: { firstName: true, email: true },
+      select: { firstName: true, email: true, dashboardLayout: true },
     }),
     db.financialAccount.findMany({
       where: { userId },
@@ -84,13 +90,7 @@ export default async function DashboardHome() {
     }),
     db.holding.findMany({
       where: { account: { userId } },
-      select: {
-        id: true,
-        symbol: true,
-        name: true,
-        currentValue: true,
-        type: true,
-      },
+      select: { id: true, symbol: true, name: true, currentValue: true, type: true },
     }),
     db.goal.findMany({
       where: { userId },
@@ -104,12 +104,10 @@ export default async function DashboardHome() {
       orderBy: { createdAt: 'asc' },
     }),
     db.transaction.count({ where: { userId } }),
-    // Current + prior month for cash flow + spending aggregates
     db.transaction.findMany({
       where: { userId, date: { gte: priorMonthStart } },
       select: { amount: true, date: true, category: true, pending: true },
     }),
-    // Recent activity (settled or pending — they show inline)
     db.transaction.findMany({
       where: { userId },
       orderBy: { date: 'desc' },
@@ -120,10 +118,10 @@ export default async function DashboardHome() {
 
   if (!user) return null;
 
-  // Trigger a background sync if accounts are connected but no transactions exist yet.
+  const layout = user.dashboardLayout ? resolveLayout(user.dashboardLayout) : DEFAULT_LAYOUT;
   const needsInitialSync = accounts.length > 0 && transactionCount === 0;
 
-  // Net worth: depository + investment - credit
+  // Net worth
   const netWorth = accounts.reduce((sum, a) => {
     const bal = a.balanceCurrent ?? 0;
     return sum + (a.type === 'credit' ? -Math.abs(bal) : bal);
@@ -132,7 +130,7 @@ export default async function DashboardHome() {
     .filter((a) => a.type === 'credit')
     .reduce((sum, a) => sum + Math.abs(a.balanceCurrent ?? 0), 0);
 
-  // Allocation: sum holdings by bucket, normalize to fractions
+  // Allocation
   const allocationRaw: Record<AllocationBucket, number> = {
     stocks: 0, bonds: 0, cash: 0, crypto: 0, other: 0,
   };
@@ -150,8 +148,11 @@ export default async function DashboardHome() {
       }
     : allocationRaw;
 
-  // Cash flow aggregate (skip pending — they double-count when they settle)
-  const periods = { current: { income: 0, expenses: 0, net: 0 }, prior: { income: 0, expenses: 0, net: 0 } };
+  // Cash flow aggregate
+  const periods = {
+    current: { income: 0, expenses: 0, net: 0 },
+    prior: { income: 0, expenses: 0, net: 0 },
+  };
   for (const t of monthTxs) {
     if (t.pending) continue;
     const bucket = t.date >= currentMonthStart ? periods.current : periods.prior;
@@ -161,7 +162,7 @@ export default async function DashboardHome() {
   periods.current.net = periods.current.income - periods.current.expenses;
   periods.prior.net = periods.prior.income - periods.prior.expenses;
 
-  // Spending by category, current vs. prior month
+  // Spending by category
   const byCategoryCurrent = new Map<string, number>();
   const byCategoryPrior = new Map<string, number>();
   for (const t of monthTxs) {
@@ -180,7 +181,7 @@ export default async function DashboardHome() {
     }))
     .sort((a, b) => b.thisMonth - a.thisMonth);
 
-  // Recent activity: shape transactions for the card
+  // Activity
   const activity: TransactionRow[] = recentTxs.map((t) => ({
     id: t.id,
     date: t.date,
@@ -195,8 +196,12 @@ export default async function DashboardHome() {
 
   const creditAccounts = accounts.filter((a) => a.type === 'credit');
   const insightLine = buildInsightLine(netWorth, accounts.length, totalHoldings);
-
   const monthLabel = now.toLocaleDateString('en-US', { month: 'long' });
+
+  // Cash on hand: depository balances only
+  const cashOnHand = accounts
+    .filter((a) => a.type === 'depository')
+    .reduce((sum, a) => sum + (a.balanceCurrent ?? 0), 0);
 
   const currentMonthTxs = monthTxs.filter((t) => t.date >= currentMonthStart);
   const priorMonthTxs = monthTxs.filter((t) => t.date < currentMonthStart);
@@ -211,6 +216,17 @@ export default async function DashboardHome() {
     })),
   });
 
+  const cardContent: Record<CardId, ReactNode> = {
+    cashflow: <CashFlowCard current={periods.current} prior={periods.prior} monthLabel={monthLabel} />,
+    spending: <SpendingCard categories={categories} />,
+    activity: <ActivityCard transactions={activity} />,
+    accounts: <AccountsCard accounts={accounts} />,
+    goals: <GoalsCard goals={goals} />,
+    investments: <InvestmentsCard holdings={holdings} />,
+    allocation: <AllocationCard allocation={allocation} />,
+    debt: <DebtCard creditAccounts={creditAccounts} />,
+  };
+
   return (
     <>
       {needsInitialSync && <TransactionSyncOnMount />}
@@ -224,53 +240,28 @@ export default async function DashboardHome() {
         }
       />
 
-      <div style={{ marginTop: 8, marginBottom: 16 }}>
-        <NetWorthHero
-          netWorth={netWorth}
-          accountCount={accounts.length}
-          debtTotal={debtTotal}
-          insightLine={insightLine}
-        />
-      </div>
-
-      <AskBar />
-
-      <BeaconsBrief briefs={briefs} />
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(12, 1fr)',
-          gap: 12,
+      <DashboardCustomizer
+        initialLayout={layout}
+        cardContent={cardContent}
+        editing={editing}
+        heroData={{
+          netWorth,
+          cash: cashOnHand,
+          investable: totalHoldings,
+          debt: debtTotal,
+          monthlyCashFlow: periods.current.net,
+          accountCount: accounts.length,
+          monthLabel,
+          insightLine,
         }}
-      >
-        <div style={{ gridColumn: 'span 4' }}>
-          <CashFlowCard current={periods.current} prior={periods.prior} monthLabel={monthLabel} />
-        </div>
-        <div style={{ gridColumn: 'span 4' }}>
-          <SpendingCard categories={categories} />
-        </div>
-        <div style={{ gridColumn: 'span 4' }}>
-          <InvestmentsCard holdings={holdings} />
-        </div>
-
-        <div style={{ gridColumn: 'span 6' }}>
-          <AccountsCard accounts={accounts} />
-        </div>
-        <div style={{ gridColumn: 'span 6' }}>
-          <GoalsCard goals={goals} />
-        </div>
-
-        <div style={{ gridColumn: 'span 6' }}>
-          <ActivityCard transactions={activity} />
-        </div>
-        <div style={{ gridColumn: 'span 3' }}>
-          <AllocationCard allocation={allocation} />
-        </div>
-        <div style={{ gridColumn: 'span 3' }}>
-          <DebtCard creditAccounts={creditAccounts} />
-        </div>
-      </div>
+        topSlot={
+          <>
+            <AskBar />
+            <BeaconsBrief briefs={briefs} />
+          </>
+        }
+      />
     </>
   );
 }
+

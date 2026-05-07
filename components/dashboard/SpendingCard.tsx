@@ -1,4 +1,4 @@
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 import { formatCurrency, labelForCategory } from '@/lib/format';
 
 export type CategorySpend = {
@@ -28,9 +28,7 @@ export function SpendingCard({ categories }: Props) {
     <Card>
       <CardHeader eyebrow="Spending" />
       {isEmpty ? (
-        <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '8px 0', lineHeight: 1.5 }}>
-          No categorized spend this month yet.
-        </div>
+        <CardEmptyState>No categorized spend this month yet.</CardEmptyState>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {top.map((c, i) => {

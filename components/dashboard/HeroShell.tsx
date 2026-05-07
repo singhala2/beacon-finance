@@ -1,25 +1,59 @@
-import { formatCurrency } from '@/lib/format';
+import type { ReactNode } from 'react';
 import { SparkleIcon } from '@/components/ui';
 
 type Props = {
-  netWorth: number;
-  accountCount: number;
-  debtTotal: number;
+  eyebrow: string;
+  value: string;
+  valueColor?: string;
+  subline?: ReactNode;
   insightLine?: string;
+  editing?: boolean;
+  onClick?: () => void;
 };
 
 const RANGES = ['1M', '3M', '1Y', 'All'] as const;
 
-export function NetWorthHero({ netWorth, accountCount, debtTotal, insightLine }: Props) {
+// Common visual shell for every hero variant. Specific heroes compute the
+// metric and pass display strings in.
+export function HeroShell({
+  eyebrow,
+  value,
+  valueColor = 'var(--color-text)',
+  subline,
+  insightLine,
+  editing,
+  onClick,
+}: Props) {
   return (
     <div
+      onClick={editing ? onClick : undefined}
       style={{
         background: 'linear-gradient(180deg, var(--color-bg-2), var(--color-bg-1))',
-        border: '1px solid var(--color-line)',
+        border: `1px solid ${editing ? 'var(--color-mint)' : 'var(--color-line)'}`,
         borderRadius: 'var(--radius-lg)',
         padding: '24px 28px 20px',
+        cursor: editing ? 'pointer' : 'default',
+        position: 'relative',
+        transition: 'border-color 0.15s',
       }}
     >
+      {editing && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 14,
+            fontSize: 10,
+            fontFamily: 'var(--font-mono)',
+            letterSpacing: 0.5,
+            color: 'var(--color-mint)',
+            textTransform: 'uppercase',
+          }}
+        >
+          click to change
+        </div>
+      )}
+
       <div
         style={{
           display: 'flex',
@@ -39,30 +73,31 @@ export function NetWorthHero({ netWorth, accountCount, debtTotal, insightLine }:
               marginBottom: 8,
             }}
           >
-            Net worth
+            {eyebrow}
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
             <div
               style={{
                 fontSize: 52,
                 fontWeight: 600,
                 letterSpacing: -1.4,
                 lineHeight: 1,
-                color: netWorth >= 0 ? 'var(--color-text)' : 'var(--color-warn)',
+                color: valueColor,
               }}
             >
-              {formatCurrency(netWorth, { maximumFractionDigits: 0 })}
+              {value}
             </div>
-            <div
-              style={{
-                fontSize: 12,
-                fontFamily: 'var(--font-mono)',
-                color: 'var(--color-text-dim)',
-              }}
-            >
-              {accountCount} account{accountCount === 1 ? '' : 's'}
-              {debtTotal > 0 ? ` · ${formatCurrency(debtTotal, { maximumFractionDigits: 0 })} debt` : ''}
-            </div>
+            {subline && (
+              <div
+                style={{
+                  fontSize: 12,
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--color-text-dim)',
+                }}
+              >
+                {subline}
+              </div>
+            )}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
@@ -89,7 +124,6 @@ export function NetWorthHero({ netWorth, accountCount, debtTotal, insightLine }:
         </div>
       </div>
 
-      {/* Flat sparkline placeholder. Real history lands in Phase 5 polish. */}
       <div
         style={{
           height: 100,

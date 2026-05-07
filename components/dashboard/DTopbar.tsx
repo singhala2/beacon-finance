@@ -1,7 +1,7 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
-import { MenuIcon } from '@/components/ui';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { MenuIcon, CheckIcon } from '@/components/ui';
 import { activeNavForPath, formatSyncedAgo } from '@/lib/dashboard';
 
 const PAGE_TITLE: Record<string, string> = {
@@ -21,7 +21,21 @@ type Props = {
 
 export function DTopbar({ sidebarOpen, onOpenSidebar, syncedAt, accountCount }: Props) {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const editing = searchParams.get('edit') === '1';
   const title = PAGE_TITLE[activeNavForPath(pathname)] ?? 'Home';
+
+  // Customize button only meaningful on the Home dashboard
+  const onHome = activeNavForPath(pathname) === 'home';
+
+  function toggleEdit() {
+    const next = new URLSearchParams(searchParams.toString());
+    if (editing) next.delete('edit');
+    else next.set('edit', '1');
+    const qs = next.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   return (
     <div
@@ -90,25 +104,27 @@ export function DTopbar({ sidebarOpen, onOpenSidebar, syncedAt, accountCount }: 
           : 'No accounts connected'}
       </div>
       <button
-        disabled
-        title="Customize mode arrives in Phase 4."
+        onClick={toggleEdit}
+        disabled={!onHome}
+        title={onHome ? undefined : 'Customize works on the Home dashboard.'}
         style={{
           display: 'flex',
           alignItems: 'center',
           gap: 6,
           padding: '6px 11px',
-          background: 'transparent',
-          border: '1px solid var(--color-line-2)',
+          background: editing ? 'var(--color-mint)' : 'transparent',
+          border: `1px solid ${editing ? 'var(--color-mint)' : 'var(--color-line-2)'}`,
           borderRadius: 'var(--radius-sm)',
-          cursor: 'not-allowed',
+          cursor: onHome ? 'pointer' : 'not-allowed',
           fontSize: 12.5,
-          color: 'var(--color-text-dim)',
+          color: editing ? 'var(--color-mint-ink)' : 'var(--color-text-muted)',
           fontFamily: 'var(--font-sans)',
           fontWeight: 540,
-          opacity: 0.5,
+          opacity: onHome ? 1 : 0.5,
         }}
       >
-        Customize
+        {editing && <CheckIcon size={11} color="var(--color-mint-ink)" />}
+        {editing ? 'Done' : 'Customize'}
       </button>
     </div>
   );

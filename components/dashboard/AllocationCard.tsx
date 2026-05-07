@@ -1,4 +1,4 @@
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 
 type Bucket = 'stocks' | 'bonds' | 'cash' | 'crypto' | 'other';
 
@@ -45,16 +45,9 @@ export function AllocationCard({ allocation }: Props) {
     <Card>
       <CardHeader eyebrow="Allocation" />
       {isEmpty ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: 'var(--color-text-muted)',
-            padding: '8px 0',
-            lineHeight: 1.5,
-          }}
-        >
+        <CardEmptyState>
           No holdings yet. Connect a brokerage to see your allocation.
-        </div>
+        </CardEmptyState>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>

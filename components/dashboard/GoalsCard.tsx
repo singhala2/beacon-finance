@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 import { formatCurrency } from '@/lib/format';
 
 export type GoalRow = {
@@ -41,16 +41,7 @@ export function GoalsCard({ goals }: Props) {
         }
       />
       {top.length === 0 ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: 'var(--color-text-muted)',
-            padding: '8px 0',
-            lineHeight: 1.5,
-          }}
-        >
-          No goals yet. Add one in onboarding or settings.
-        </div>
+        <CardEmptyState>No goals yet. Add one in onboarding or settings.</CardEmptyState>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {top.map((g) => {

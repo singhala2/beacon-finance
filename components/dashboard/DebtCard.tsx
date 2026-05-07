@@ -1,4 +1,4 @@
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 import { formatCurrency } from '@/lib/format';
 import type { AccountRow } from './AccountsCard';
 
@@ -17,16 +17,7 @@ export function DebtCard({ creditAccounts }: Props) {
     <Card>
       <CardHeader eyebrow="Debt" />
       {creditAccounts.length === 0 ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: 'var(--color-text-muted)',
-            padding: '8px 0',
-            lineHeight: 1.5,
-          }}
-        >
-          No credit accounts connected.
-        </div>
+        <CardEmptyState>No credit accounts connected.</CardEmptyState>
       ) : (
         <>
           <div

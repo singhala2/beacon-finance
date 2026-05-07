@@ -1,4 +1,4 @@
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 import { formatCurrency } from '@/lib/format';
 
 type Period = { income: number; expenses: number; net: number };
@@ -33,9 +33,9 @@ export function CashFlowCard({ current, prior, monthLabel }: Props) {
         }
       />
       {isEmpty ? (
-        <div style={{ fontSize: 13, color: 'var(--color-text-muted)', padding: '8px 0', lineHeight: 1.5 }}>
+        <CardEmptyState>
           No transactions yet. Once Plaid finishes pulling, the picture will fill in.
-        </div>
+        </CardEmptyState>
       ) : (
         <>
           <div style={{ fontSize: 26, fontWeight: 600, letterSpacing: -0.6, marginBottom: 12, color: netColor }}>

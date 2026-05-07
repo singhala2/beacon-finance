@@ -1,4 +1,4 @@
-import { Card, CardHeader } from './Card';
+import { Card, CardHeader, CardEmptyState } from './Card';
 import { formatCurrency } from '@/lib/format';
 
 export type HoldingRow = {
@@ -30,16 +30,9 @@ export function InvestmentsCard({ holdings }: Props) {
         }
       />
       {holdings.length === 0 ? (
-        <div
-          style={{
-            fontSize: 13,
-            color: 'var(--color-text-muted)',
-            padding: '8px 0',
-            lineHeight: 1.5,
-          }}
-        >
+        <CardEmptyState>
           No holdings pulled yet. Connect a brokerage in settings.
-        </div>
+        </CardEmptyState>
       ) : (
         <>
           <div
