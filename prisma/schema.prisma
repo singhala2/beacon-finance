@@ -28,8 +28,83 @@ model User {
   onboardingStep     Int     @default(0)  // 0 = welcome, 1-6 = steps, 7 = complete
   onboardingContext  String? @db.Text     // free-text from Step 6 audit
 
-  accounts AuthAccount[]
-  sessions Session[]
+  authAccounts      AuthAccount[]
+  sessions          Session[]
+  plaidItems        PlaidItem[]
+  financialAccounts FinancialAccount[]
+  goals             Goal[]
+}
+
+model Goal {
+  id                  String    @id @default(cuid())
+  userId              String
+  name                String
+  type                String    // emergency | house | retirement | debt | travel | custom
+  targetAmount        Float?
+  targetDate          DateTime?
+  monthlyContribution Float?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PlaidItem {
+  id              String   @id @default(cuid())
+  userId          String
+  plaidItemId     String   @unique
+  accessToken     String   // AES-256-GCM encrypted
+  institutionId   String?
+  institutionName String?
+  status          String   @default("active")
+  cursor          String?  // incremental transaction sync cursor
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts FinancialAccount[]
+}
+
+model FinancialAccount {
+  id               String   @id @default(cuid())
+  userId           String
+  plaidItemId      String?
+  plaidAccountId   String?  @unique
+  institution      String
+  name             String
+  mask             String?
+  type             String   // depository | credit | investment | loan | other
+  subtype          String?
+  balanceCurrent   Float?
+  balanceAvailable Float?
+  balanceLimit     Float?
+  currency         String   @default("USD")
+  isHidden         Boolean  @default(false)
+  customName       String?
+  lastSyncedAt     DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  item     PlaidItem? @relation(fields: [plaidItemId], references: [id])
+  holdings Holding[]
+}
+
+model Holding {
+  id           String   @id @default(cuid())
+  accountId    String
+  securityId   String?
+  symbol       String?
+  name         String
+  quantity     Float
+  costBasis    Float?
+  currentPrice Float?
+  currentValue Float
+  type         String   // equity | etf | mutual_fund | crypto | bond | cash | other
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  account FinancialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
 // NextAuth's "Account" table — provider-linked auth identity.

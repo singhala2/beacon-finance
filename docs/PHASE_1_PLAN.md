@@ -18,10 +18,10 @@ Each is independently shippable. Commit and push after each.
 
 | #  | Milestone | Acceptance | Status |
 |----|-----------|------------|--------|
-| 1A | UI primitives port + `/welcome` showcase | Welcome page matches prototype pixel-for-pixel. No backend. | not started |
-| 1B | Auth flow (sign-in, magic link, session) | "Get started" routes to `/signin`, real Resend magic link delivers, click lands in authed session. | not started |
-| 1C | Onboarding shell + Step 1 (Profile) | `/onboard/1` renders DScreen layout, profile form persists to DB, back preserves state. | not started |
-| 1D | Plaid integration (Steps 2 + 3) | Real Plaid Sandbox connect, accounts and holdings stored in DB. | not started |
+| 1A | UI primitives port + `/welcome` showcase | Welcome page matches prototype pixel-for-pixel. No backend. | ✅ done |
+| 1B | Auth flow (sign-in, magic link, session) | "Get started" routes to `/signin`, real Resend magic link delivers, click lands in authed session. | ✅ done |
+| 1C | Onboarding shell + Step 1 (Profile) | `/onboard/1` renders DScreen layout, profile form persists to DB, back preserves state. | ✅ done |
+| 1D | Plaid integration (Steps 2 + 3) | Real Plaid Sandbox connect, accounts and holdings stored in DB. | next |
 | 1E | Steps 4-6 (Goals, Risk, Audit) + dashboard handoff | Goals saved, risk recorded, audit free-text saved, redirect to `/`. | not started |
 
 ## Database schema additions (`prisma/schema.prisma`)

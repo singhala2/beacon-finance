@@ -1,11 +1,16 @@
-import { auth } from '@/lib/auth';
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 
-export default auth((req) => {
+// Middleware runs on the Edge runtime where Prisma (database sessions) is not
+// available. Check for the session cookie as a lightweight proxy for "authed";
+// server components still call auth() + Prisma for real validation.
+export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isAuthed = !!req.auth?.user;
 
-  // Public routes
+  const sessionToken =
+    req.cookies.get('authjs.session-token')?.value ??
+    req.cookies.get('__Secure-authjs.session-token')?.value;
+  const isAuthed = !!sessionToken;
+
   const isPublic =
     pathname === '/welcome' ||
     pathname.startsWith('/signin') ||
@@ -17,15 +22,16 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
-  // Authed users hitting public auth pages should bounce to /
-  if (isAuthed && (pathname === '/welcome' || pathname.startsWith('/signin'))) {
+  // /welcome is allowed for authenticated users (back button from onboarding lands here).
+  // /signin is not — redirect authed users away from the auth form.
+  if (isAuthed && pathname.startsWith('/signin')) {
     const url = req.nextUrl.clone();
     url.pathname = '/';
     return NextResponse.redirect(url);
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   // Match all paths except Next assets and static files.

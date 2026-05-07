@@ -3,8 +3,13 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { DScreen } from '@/components/onboard/DScreen';
 import { ProfileStep } from '@/components/onboard/ProfileStep';
-import { StepStub } from '@/components/onboard/StepStub';
+import { ConnectBankStep } from '@/components/onboard/ConnectBankStep';
+import { InvestmentsStep } from '@/components/onboard/InvestmentsStep';
+import { GoalsStep } from '@/components/onboard/GoalsStep';
+import { RiskStep } from '@/components/onboard/RiskStep';
+import { AuditStep } from '@/components/onboard/AuditStep';
 import { parseStepParam, previousStep, type OnboardingStep } from '@/lib/onboard';
+import type { ConnectedAccount } from '@/components/plaid/PlaidLinkButton';
 
 type LeftCopy = { eyebrow?: string; heading: string; body: string };
 
@@ -22,16 +27,18 @@ const LEFT_COPY: Record<OnboardingStep, LeftCopy> = {
     body: 'Brokerages, retirement, crypto. Beacon needs the full picture to spot what is working and what is not.',
   },
   4: {
-    heading: 'What are you working toward?',
-    body: 'Pick one to three goals. Beacon plans the contributions and adjusts as life changes.',
+    eyebrow: 'Conversation',
+    heading: 'What are you saving for?',
+    body: 'Goals are how Beacon shapes every recommendation. Pick from common ones, or describe yours in plain words.',
   },
   5: {
-    heading: 'How do you feel about market swings?',
-    body: 'Your risk profile shapes the strategies we suggest. You can change this anytime.',
+    heading: 'How aggressive do you want to be?',
+    body: 'This shapes your portfolio mix. Adjustable anytime.',
   },
   6: {
-    heading: 'Here is what Beacon learned.',
-    body: 'A quick recap before we open your dashboard. Add anything else we should know.',
+    eyebrow: 'First audit',
+    heading: 'Here is what I found.',
+    body: 'A quick read of your accounts and the first things to act on. Open the dashboard to dig in.',
   },
 };
 
@@ -54,6 +61,7 @@ export default async function OnboardStepPage({
       age: true,
       location: true,
       onboardingStep: true,
+      riskTolerance: true,
     },
   });
   if (!user) redirect('/welcome');
@@ -64,8 +72,56 @@ export default async function OnboardStepPage({
     redirect(`/onboard/${maxAllowed}`);
   }
 
+  // Load financial accounts for Steps 2, 3, and 6 (audit net worth)
+  const financialAccounts =
+    step === 2 || step === 3 || step === 6
+      ? await db.financialAccount.findMany({
+          where: { userId: session.user.id },
+          select: {
+            id: true,
+            institution: true,
+            name: true,
+            mask: true,
+            type: true,
+            subtype: true,
+            balanceCurrent: true,
+            balanceAvailable: true,
+            currency: true,
+          },
+        })
+      : [];
+
+  // Load goals for Step 6 audit summary
+  const goals =
+    step === 6
+      ? await db.goal.findMany({
+          where: { userId: session.user.id },
+          select: { name: true, type: true },
+          orderBy: { createdAt: 'asc' },
+        })
+      : [];
+
   const back = previousStep(step);
   const copy = LEFT_COPY[step];
+
+  const bankAccounts: ConnectedAccount[] = financialAccounts
+    .filter((a) => a.type === 'depository' || a.type === 'credit')
+    .map((a) => ({ ...a }));
+
+  const investmentAccounts: ConnectedAccount[] = financialAccounts
+    .filter((a) => a.type === 'investment')
+    .map((a) => ({ ...a }));
+
+  // Compute net worth and debt total for audit step
+  const netWorth = financialAccounts.reduce((sum, a) => {
+    const bal = a.balanceCurrent ?? 0;
+    // Credit accounts: balance is amount owed (negative contribution to net worth)
+    return sum + (a.type === 'credit' ? -Math.abs(bal) : bal);
+  }, 0);
+
+  const debtTotal = financialAccounts
+    .filter((a) => a.type === 'credit')
+    .reduce((sum, a) => sum + Math.abs(a.balanceCurrent ?? 0), 0);
 
   return (
     <DScreen
@@ -108,16 +164,47 @@ export default async function OnboardStepPage({
           >
             {copy.body}
           </p>
+          {step === 2 && (
+            <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                'Read-only by default. Automation is opt-in later.',
+                'Credentials never touch our servers.',
+                'Disconnect anytime. Your data goes with you.',
+              ].map((s) => (
+                <div
+                  key={s}
+                  style={{
+                    display: 'flex',
+                    gap: 10,
+                    alignItems: 'flex-start',
+                    fontSize: 13,
+                    color: 'var(--color-text-muted)',
+                  }}
+                >
+                  <span style={{ color: 'var(--color-mint)', marginTop: 1 }}>✓</span>
+                  <span>{s}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       }
-      right={renderStep(step, user)}
+      right={renderStep(step, user, bankAccounts, investmentAccounts, goals, {
+        netWorth,
+        debtTotal,
+        accountCount: financialAccounts.length,
+      })}
     />
   );
 }
 
 function renderStep(
   step: OnboardingStep,
-  user: { firstName: string | null; age: number | null; location: string | null },
+  user: { firstName: string | null; age: number | null; location: string | null; riskTolerance: number | null },
+  bankAccounts: ConnectedAccount[],
+  investmentAccounts: ConnectedAccount[],
+  goals: { name: string; type: string }[],
+  audit: { netWorth: number; debtTotal: number; accountCount: number },
 ) {
   switch (step) {
     case 1:
@@ -131,43 +218,24 @@ function renderStep(
         />
       );
     case 2:
-      return (
-        <StepStub
-          step={2}
-          title="Connect your banks."
-          description="Plaid bank connect is wired in milestone 1D. For now, skip ahead and we will pick this up once your Plaid keys are in place."
-        />
-      );
+      return <ConnectBankStep initial={bankAccounts} />;
     case 3:
-      return (
-        <StepStub
-          step={3}
-          title="Pull in your investments."
-          description="Brokerage and retirement linking is wired in milestone 1D, alongside the bank connect."
-        />
-      );
+      return <InvestmentsStep initial={investmentAccounts} />;
     case 4:
-      return (
-        <StepStub
-          step={4}
-          title="What are you working toward?"
-          description="Goal picker arrives in milestone 1E."
-        />
-      );
+      return <GoalsStep />;
     case 5:
-      return (
-        <StepStub
-          step={5}
-          title="How do you feel about market swings?"
-          description="Risk-tolerance picker arrives in milestone 1E."
-        />
-      );
+      return <RiskStep initial={user.riskTolerance ?? 0} />;
     case 6:
       return (
-        <StepStub
-          step={6}
-          title="Here is what Beacon learned."
-          description="The audit summary arrives in milestone 1E. Submitting now will mark onboarding complete."
+        <AuditStep
+          data={{
+            firstName: user.firstName,
+            netWorth: audit.netWorth,
+            accountCount: audit.accountCount,
+            debtTotal: audit.debtTotal,
+            goals,
+            riskTolerance: user.riskTolerance,
+          }}
         />
       );
   }
