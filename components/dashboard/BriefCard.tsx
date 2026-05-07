@@ -1,3 +1,6 @@
+'use client';
+
+import Link from 'next/link';
 import { ArrowIcon } from '@/components/ui';
 
 export type BriefTag = 'WIN' | 'WATCH' | 'PLAN';
@@ -13,10 +16,17 @@ type Props = {
   title: string;
   body: string;
   cta?: string;
+  // Persisted-insight only — gives us a target for dismiss + chat handoff
+  id?: string;
+  onDismiss?: () => void;
 };
 
-export function BriefCard({ tag, title, body, cta }: Props) {
+export function BriefCard({ tag, title, body, cta, id, onDismiss }: Props) {
   const color = TAG_COLOR[tag];
+  const chatHref = id
+    ? `/chat?q=${encodeURIComponent(`Help me act on this insight: ${title}. ${body}`)}`
+    : null;
+
   return (
     <div
       style={{
@@ -27,6 +37,7 @@ export function BriefCard({ tag, title, body, cta }: Props) {
         display: 'flex',
         flexDirection: 'column',
         gap: 6,
+        position: 'relative',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -45,27 +56,68 @@ export function BriefCard({ tag, title, body, cta }: Props) {
         >
           {tag}
         </span>
+        {onDismiss && (
+          <button
+            onClick={onDismiss}
+            aria-label="Dismiss insight"
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--color-text-faint)',
+              cursor: 'pointer',
+              padding: 0,
+              lineHeight: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M4 4L12 12M12 4L4 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
       </div>
       <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text)' }}>{title}</div>
       <div style={{ fontSize: 12.5, color: 'var(--color-text-muted)', lineHeight: 1.45 }}>{body}</div>
       {cta && (
-        <div
-          style={{
-            marginTop: 4,
-            alignSelf: 'flex-start',
-            color: 'var(--color-mint)',
-            fontSize: 12,
-            fontWeight: 540,
-            fontFamily: 'var(--font-sans)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 4,
-            opacity: 0.55,
-          }}
-          title="Action shortcuts arrive in Phase 5."
-        >
-          {cta} <ArrowIcon size={11} color="var(--color-mint)" />
-        </div>
+        chatHref ? (
+          <Link
+            href={chatHref}
+            style={{
+              marginTop: 4,
+              alignSelf: 'flex-start',
+              color: 'var(--color-mint)',
+              fontSize: 12,
+              fontWeight: 540,
+              fontFamily: 'var(--font-sans)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              textDecoration: 'none',
+            }}
+          >
+            {cta} <ArrowIcon size={11} color="var(--color-mint)" />
+          </Link>
+        ) : (
+          <div
+            style={{
+              marginTop: 4,
+              alignSelf: 'flex-start',
+              color: 'var(--color-mint)',
+              fontSize: 12,
+              fontWeight: 540,
+              fontFamily: 'var(--font-sans)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              opacity: 0.55,
+            }}
+            title="Action shortcuts work once we have AI insights generated for you."
+          >
+            {cta} <ArrowIcon size={11} color="var(--color-mint)" />
+          </div>
+        )
       )}
     </div>
   );

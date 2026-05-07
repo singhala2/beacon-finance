@@ -11,11 +11,15 @@ const GoalSchema = z.object({
   monthlyContribution: z.number().positive().optional(),
 });
 
-const BodySchema = z.object({
+const ReplaceBodySchema = z.object({
   goals: z.array(GoalSchema).min(1).max(10),
 });
 
-// Replaces all goals for the user in one shot (onboarding use case).
+// Two POST shapes:
+//   { goals: [...] }       — replace-all (onboarding)
+//   { goal: {...} }        — single create (post-onboarding from /goals)
+const SingleBodySchema = z.object({ goal: GoalSchema });
+
 export async function POST(req: Request) {
   const session = await auth();
   const userId = session?.user?.id;
@@ -24,26 +28,42 @@ export async function POST(req: Request) {
   }
 
   const json = await req.json().catch(() => null);
-  const parsed = BodySchema.safeParse(json);
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'Invalid payload', issues: parsed.error.issues }, { status: 400 });
-  }
 
-  await db.$transaction([
-    db.goal.deleteMany({ where: { userId } }),
-    db.goal.createMany({
-      data: parsed.data.goals.map((g) => ({
+  const single = SingleBodySchema.safeParse(json);
+  if (single.success) {
+    const g = single.data.goal;
+    const created = await db.goal.create({
+      data: {
         userId,
         name: g.name,
         type: g.type,
         targetAmount: g.targetAmount ?? null,
         targetDate: g.targetDate ? new Date(g.targetDate) : null,
         monthlyContribution: g.monthlyContribution ?? null,
-      })),
-    }),
-  ]);
+      },
+    });
+    return NextResponse.json({ ok: true, goal: created });
+  }
 
-  return NextResponse.json({ ok: true });
+  const replace = ReplaceBodySchema.safeParse(json);
+  if (replace.success) {
+    await db.$transaction([
+      db.goal.deleteMany({ where: { userId } }),
+      db.goal.createMany({
+        data: replace.data.goals.map((g) => ({
+          userId,
+          name: g.name,
+          type: g.type,
+          targetAmount: g.targetAmount ?? null,
+          targetDate: g.targetDate ? new Date(g.targetDate) : null,
+          monthlyContribution: g.monthlyContribution ?? null,
+        })),
+      }),
+    ]);
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ error: 'Invalid payload' }, { status: 400 });
 }
 
 export async function GET() {
@@ -53,7 +73,7 @@ export async function GET() {
   }
 
   const goals = await db.goal.findMany({
-    where: { userId: session.user.id },
+    where: { userId: session.user.id, deletedAt: null },
     orderBy: { createdAt: 'asc' },
   });
 

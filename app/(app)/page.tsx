@@ -13,7 +13,8 @@ import { TransactionSyncOnMount } from '@/components/dashboard/TransactionSyncOn
 import { AskBar } from '@/components/dashboard/AskBar';
 import { BeaconsBrief } from '@/components/dashboard/BeaconsBrief';
 import { DashboardCustomizer } from '@/components/dashboard/DashboardCustomizer';
-import { generateBriefs } from '@/lib/insights';
+import { generateBriefs, type Brief } from '@/lib/insights';
+import type { BriefTag } from '@/components/dashboard/BriefCard';
 import { formatCurrency } from '@/lib/format';
 import { resolveLayout, DEFAULT_LAYOUT, type CardId } from '@/lib/dashboard-layout';
 import type { ReactNode } from 'react';
@@ -54,6 +55,12 @@ function startOfMonth(d: Date): Date {
 
 const EXCLUDED_SPEND_CATEGORIES = new Set(['TRANSFER_IN', 'TRANSFER_OUT', 'INCOME', 'LOAN_PAYMENTS']);
 
+function severityToTag(severity: string): BriefTag {
+  if (severity === 'opportunity') return 'WIN';
+  if (severity === 'attention') return 'WATCH';
+  return 'PLAN';
+}
+
 type Props = {
   searchParams: Promise<{ edit?: string }>;
 };
@@ -70,7 +77,7 @@ export default async function DashboardHome({ searchParams }: Props) {
   const currentMonthStart = startOfMonth(now);
   const priorMonthStart = startOfMonth(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
 
-  const [user, accounts, holdings, goals, transactionCount, monthTxs, recentTxs] = await Promise.all([
+  const [user, accounts, holdings, goals, transactionCount, monthTxs, recentTxs, dbInsights] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
       select: { firstName: true, email: true, dashboardLayout: true },
@@ -93,7 +100,7 @@ export default async function DashboardHome({ searchParams }: Props) {
       select: { id: true, symbol: true, name: true, currentValue: true, type: true },
     }),
     db.goal.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       select: {
         id: true,
         name: true,
@@ -113,6 +120,11 @@ export default async function DashboardHome({ searchParams }: Props) {
       orderBy: { date: 'desc' },
       take: 5,
       include: { account: { select: { institution: true } } },
+    }),
+    db.insight.findMany({
+      where: { userId, dismissedAt: null },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
     }),
   ]);
 
@@ -205,16 +217,28 @@ export default async function DashboardHome({ searchParams }: Props) {
 
   const currentMonthTxs = monthTxs.filter((t) => t.date >= currentMonthStart);
   const priorMonthTxs = monthTxs.filter((t) => t.date < currentMonthStart);
-  const briefs = generateBriefs({
-    accounts,
-    currentMonthTxs,
-    priorMonthTxs,
-    goals: goals.map((g) => ({
-      name: g.name,
-      targetAmount: g.targetAmount,
-      targetDate: g.targetDate,
-    })),
-  });
+
+  // Prefer AI-generated insights when present. Fall back to hardcoded triggers
+  // for fresh users (before the cron has run for them).
+  const briefs: Brief[] = dbInsights.length > 0
+    ? dbInsights.map((i) => ({
+        id: i.id,
+        tag: severityToTag(i.severity),
+        title: i.headline,
+        body: i.body,
+        cta: 'Discuss in chat',
+        score: 0,
+      }))
+    : generateBriefs({
+        accounts,
+        currentMonthTxs,
+        priorMonthTxs,
+        goals: goals.map((g) => ({
+          name: g.name,
+          targetAmount: g.targetAmount,
+          targetDate: g.targetDate,
+        })),
+      });
 
   const cardContent: Record<CardId, ReactNode> = {
     cashflow: <CashFlowCard current={periods.current} prior={periods.prior} monthLabel={monthLabel} />,

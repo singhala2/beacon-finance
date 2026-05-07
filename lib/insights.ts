@@ -5,6 +5,8 @@ import { formatCurrency, labelForCategory } from './format';
 import type { BriefTag } from '@/components/dashboard/BriefCard';
 
 export type Brief = {
+  // Persisted insights (from DB) carry an id; hardcoded fallbacks do not.
+  id?: string;
   tag: BriefTag;
   title: string;
   body: string;

@@ -96,7 +96,7 @@ export default async function OnboardStepPage({
   const goals =
     step === 6
       ? await db.goal.findMany({
-          where: { userId: session.user.id },
+          where: { userId: session.user.id, deletedAt: null },
           select: { name: true, type: true },
           orderBy: { createdAt: 'asc' },
         })

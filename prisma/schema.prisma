@@ -31,6 +31,9 @@ model User {
   // Dashboard customization (Phase 4). Null = use default layout.
   dashboardLayout    Json?
 
+  // Phase 5: throttle for insight regeneration so cron + manual refresh don't double up
+  lastInsightGeneratedAt DateTime?
+
   authAccounts      AuthAccount[]
   sessions          Session[]
   plaidItems        PlaidItem[]
@@ -38,6 +41,24 @@ model User {
   goals             Goal[]
   transactions      Transaction[]
   conversations     Conversation[]
+  insights          Insight[]
+}
+
+model Insight {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String    // idle_cash | match_gap | allocation_drift | fee_high | goal_behind | spend_spike | savings_opportunity | debt | other
+  severity    String    // info | opportunity | attention
+  headline    String
+  body        String    @db.Text
+  evidence    Json?     // [{ metric: string, value: number }]
+  actions     Json?     // [{ id: string, label: string }]
+  dismissedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dismissedAt, createdAt])
 }
 
 model Conversation {
@@ -73,10 +94,13 @@ model Goal {
   targetAmount        Float?
   targetDate          DateTime?
   monthlyContribution Float?
+  deletedAt           DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, deletedAt])
 }
 
 model PlaidItem {

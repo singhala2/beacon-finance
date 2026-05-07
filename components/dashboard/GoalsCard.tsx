@@ -45,7 +45,7 @@ export function GoalsCard({ goals }: Props) {
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           {top.map((g) => {
-            // Linkage to actual progress lands in Phase 5 — for now show 0/target.
+            // Goal-to-account linkage is not yet wired. Progress shows as 0 / target until then.
             const target = g.targetAmount ?? 0;
             const current = 0;
             const pct = target > 0 ? Math.min(100, (current / target) * 100) : 0;

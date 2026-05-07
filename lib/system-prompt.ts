@@ -9,10 +9,23 @@ const RISK_LABELS: Record<number, string> = {
   5: 'Aggressive',
 };
 
-// Builds the system prompt for an Ask Beacon turn. Pulls the user's live
-// account, holding, and goal state straight from the DB so balances are
-// never stale.
-export async function buildSystemPrompt(userId: string): Promise<string> {
+export type UserContext = {
+  displayName: string;
+  riskLabel: string;
+  onboardingContext: string | null;
+  accountLines: string;
+  holdingLines: string;
+  goalLines: string;
+  // Raw aggregates other callers (insight generator) may want without re-querying:
+  netWorth: number;
+  cashOnHand: number;
+  investable: number;
+  debtTotal: number;
+};
+
+// Pulls the user's live financial state and renders it as a reusable block
+// of text. Used by both the chat system prompt and the insights generator.
+export async function buildUserContextSnippet(userId: string): Promise<UserContext> {
   const [user, accounts, holdings, goals] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
@@ -25,7 +38,7 @@ export async function buildSystemPrompt(userId: string): Promise<string> {
       },
     }),
     db.financialAccount.findMany({
-      where: { userId },
+      where: { userId, isHidden: false },
       select: {
         institution: true,
         name: true,
@@ -40,7 +53,7 @@ export async function buildSystemPrompt(userId: string): Promise<string> {
       select: { symbol: true, name: true, currentValue: true, quantity: true },
     }),
     db.goal.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       select: { name: true, type: true, targetAmount: true, targetDate: true },
       orderBy: { createdAt: 'asc' },
     }),
@@ -85,24 +98,53 @@ export async function buildSystemPrompt(userId: string): Promise<string> {
 
   const riskLabel = user.riskTolerance ? RISK_LABELS[user.riskTolerance] ?? 'Unknown' : 'Not set';
 
-  const contextLine = user.onboardingContext
-    ? `\nUser-supplied context: ${user.onboardingContext}\n`
+  const cashOnHand = accounts
+    .filter((a) => a.type === 'depository')
+    .reduce((s, a) => s + (a.balanceCurrent ?? 0), 0);
+  const investable = holdings.reduce((s, h) => s + h.currentValue, 0);
+  const debtTotal = accounts
+    .filter((a) => a.type === 'credit')
+    .reduce((s, a) => s + Math.abs(a.balanceCurrent ?? 0), 0);
+  const netWorth = accounts.reduce((s, a) => {
+    const bal = a.balanceCurrent ?? 0;
+    return s + (a.type === 'credit' ? -Math.abs(bal) : bal);
+  }, 0) + investable;
+
+  return {
+    displayName,
+    riskLabel,
+    onboardingContext: user.onboardingContext,
+    accountLines,
+    holdingLines,
+    goalLines,
+    netWorth,
+    cashOnHand,
+    investable,
+    debtTotal,
+  };
+}
+
+// Builds the system prompt for an Ask Beacon turn.
+export async function buildSystemPrompt(userId: string): Promise<string> {
+  const ctx = await buildUserContextSnippet(userId);
+  const contextLine = ctx.onboardingContext
+    ? `\nUser-supplied context: ${ctx.onboardingContext}\n`
     : '';
 
-  return `You are Beacon, a personal finance copilot for ${displayName}.
+  return `You are Beacon, a personal finance copilot for ${ctx.displayName}.
 
-You have read-only access to ${displayName}'s connected financial accounts. Always quote real numbers from the data below when relevant. Never fabricate balances, prices, transactions, or returns. If the user asks about something the data does not cover, say so plainly.
+You have read-only access to ${ctx.displayName}'s connected financial accounts. Always quote real numbers from the data below when relevant. Never fabricate balances, prices, transactions, or returns. If the user asks about something the data does not cover, say so plainly.
 
 CONNECTED ACCOUNTS:
-${accountLines}
+${ctx.accountLines}
 
 INVESTMENT HOLDINGS:
-${holdingLines}
+${ctx.holdingLines}
 
 GOALS:
-${goalLines}
+${ctx.goalLines}
 
-RISK PROFILE: ${riskLabel}
+RISK PROFILE: ${ctx.riskLabel}
 ${contextLine}
 VOICE AND STYLE:
 - Talk like a smart friend who is also a CFA. Conversational, precise, calm. Second person.

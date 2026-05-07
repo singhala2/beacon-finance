@@ -3,9 +3,9 @@ import { StubPage } from '@/components/dashboard/StubPage';
 export default function SpendingPage() {
   return (
     <StubPage
-      phase="Phase 5"
+      phase="Coming soon"
       title="Spending"
-      description="Your top categories this month and the comparison to last month live on the home dashboard for now. The full drilldown — by merchant, by date range, by account — lands in Phase 5."
+      description="Your top categories this month and the comparison to last month live on the home dashboard for now. A full drilldown by merchant, date range, and account is on the way."
     />
   );
 }
