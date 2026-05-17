@@ -27,6 +27,7 @@ Each is independently shippable. Commit and push after each.
 | 5D | `/goals/[id]` detail page | Replace the goal stub with a real detail page: progress chart, contribution suggestion, edit/delete. Top-level `/goals` becomes a goal list. | ✅ done |
 | 5E | `/settings` tabs — profile, integrations, data, danger | Profile (name/age/location), integrations (Plaid items list with disconnect), data (export JSON, account deletion), all wired to real endpoints. | ✅ done |
 | 5F | Polish pass — loading, empty, error, copy | Audit every screen for skeletons during data fetch, friendly empty states, consistent error toasts, and copy that follows CLAUDE.md voice rules. | ✅ done |
+| 5G | `/spending` page — first draft | Replace the stub with a real page: total month spend with prior-month delta, full category breakdown, full filterable transaction list. | ✅ done |
 
 ## Database schema additions (`prisma/schema.prisma`)
 
@@ -139,4 +140,7 @@ _(empty)_
 _(empty)_
 
 ### 5F notes
+_(empty)_
+
+### 5G notes
 _(empty)_
