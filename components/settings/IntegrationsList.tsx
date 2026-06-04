@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { BBtn } from '@/components/ui';
 import { Card } from '@/components/dashboard/Card';
+import { PlaidLinkButton } from '@/components/plaid/PlaidLinkButton';
 import { formatSyncedAgo } from '@/lib/dashboard';
 
 type Item = {
@@ -38,21 +39,45 @@ export function IntegrationsList({ items }: Props) {
     });
   }
 
-  if (items.length === 0) {
-    return (
+  const connectButton = (
+    <PlaidLinkButton
+      onSuccess={() => router.refresh()}
+      style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
+    >
       <div
         style={{
-          padding: 32,
-          background: 'var(--color-bg-2)',
+          width: '100%',
           border: '1px dashed var(--color-line-2)',
-          borderRadius: 'var(--radius-lg)',
-          textAlign: 'center',
+          borderRadius: 'var(--radius-md)',
+          padding: '12px 16px',
+          fontSize: 13,
           color: 'var(--color-text-muted)',
-          fontSize: 14,
-          lineHeight: 1.6,
+          textAlign: 'center',
         }}
       >
-        No institutions connected.
+        + Connect another institution
+      </div>
+    </PlaidLinkButton>
+  );
+
+  if (items.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div
+          style={{
+            padding: 32,
+            background: 'var(--color-bg-2)',
+            border: '1px dashed var(--color-line-2)',
+            borderRadius: 'var(--radius-lg)',
+            textAlign: 'center',
+            color: 'var(--color-text-muted)',
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          No institutions connected.
+        </div>
+        {connectButton}
       </div>
     );
   }
@@ -101,9 +126,7 @@ export function IntegrationsList({ items }: Props) {
           </Card>
         );
       })}
-      <p style={{ marginTop: 4, fontSize: 12, color: 'var(--color-text-dim)', lineHeight: 1.5 }}>
-        To add another institution, head to the dashboard and use the Plaid connect on the home screen.
-      </p>
+      {connectButton}
     </div>
   );
 }
