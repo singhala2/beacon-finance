@@ -16,7 +16,7 @@ Each is independently shippable. Commit and push after each.
 
 | #  | Milestone | Acceptance | Status |
 |----|-----------|------------|--------|
-| 7A | Security headers + CSP | `next.config.ts` returns `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` on every response. CSP allows only the origins we actually use (self, Anthropic, Plaid, Sentry, Resend). Verified with `curl -I` against a running dev server. | ⏳ next |
+| 7A | Security headers + CSP | `next.config.ts` returns `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` on every response. CSP allows only the origins we actually use (self, Anthropic, Plaid, Sentry, Resend). Verified with `curl -I` against a running dev server. | ✅ done |
 | 7B | Audit log | New `AuditLog` Prisma model. `logAudit()` helper in `lib/audit.ts`. Emit events on: signin, signout, Plaid item connect/disconnect, account rename/hide, transaction sync, goal create/delete, settings change, data export, account deletion. Visible in a `/settings/data` read-only table. | ⏳ not started |
 | 7C | Rate limiting | `@upstash/ratelimit` + Upstash Redis. Per-IP limits on auth + signin magic link. Per-user limits on Plaid exchange/sync, chat, insights generation, export. 429s render a friendly toast in the UI, not a raw error. | ⏳ not started |
 | 7D | Sentry error monitoring | `@sentry/nextjs` wired for server, client, edge runtimes. User id tagged on capture; PII (emails, account numbers, access tokens) scrubbed from breadcrumbs and request bodies. One deliberate test error confirmed visible in the Sentry dashboard. Source-map upload deferred (no `SENTRY_AUTH_TOKEN`). | ⏳ not started |
@@ -113,7 +113,7 @@ These do NOT block "production-ready engineering" but DO block "real users can s
 ## Per-sub-milestone notes
 
 ### 7A notes
-_(empty)_
+CSP built from a structured directives object so additions stay readable. Dev relaxations: `'unsafe-eval'` in `script-src` (Turbopack HMR) and `ws://localhost:*` / `http://localhost:*` in `connect-src`. `upgrade-insecure-requests` disabled in dev (would block HTTP localhost). Sentry ingest hosts (`*.ingest.sentry.io`, `*.ingest.us.sentry.io`) and Plaid (`cdn.plaid.com`, `*.plaid.com`) pre-allowed so 7C/7D don't churn this file. Verified headers on `/welcome`, `/signin`, `/api/me` redirect. **In-browser smoke test still owed** — CSP can silently break things curl won't catch (Plaid Link popup is the highest risk).
 
 ### 7B notes
 _(empty)_
