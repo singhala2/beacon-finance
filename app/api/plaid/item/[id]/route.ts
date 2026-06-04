@@ -3,11 +3,12 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { plaid } from '@/lib/plaid';
 import { decrypt } from '@/lib/encryption';
+import { logAudit } from '@/lib/audit';
 
 // Disconnects a Plaid institution. Revokes the access token with Plaid (best
 // effort) so we stop incurring API calls, then deletes the PlaidItem locally.
 // Cascades remove the FinancialAccounts under it (and their holdings + txs).
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -17,7 +18,7 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
 
   const item = await db.plaidItem.findFirst({
     where: { id, userId },
-    select: { id: true, accessToken: true },
+    select: { id: true, accessToken: true, institutionName: true },
   });
   if (!item) {
     return NextResponse.json({ error: 'Item not found' }, { status: 404 });
@@ -33,5 +34,13 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   }
 
   await db.plaidItem.delete({ where: { id: item.id } });
+  await logAudit({
+    userId,
+    action: 'plaid.item.disconnect',
+    targetType: 'PlaidItem',
+    targetId: item.id,
+    metadata: { institutionName: item.institutionName },
+    req,
+  });
   return NextResponse.json({ ok: true });
 }

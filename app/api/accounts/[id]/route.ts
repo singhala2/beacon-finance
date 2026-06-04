@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 
 const PatchSchema = z.object({
   customName: z.string().min(1).max(100).nullable().optional(),
@@ -29,5 +30,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (result.count === 0) {
     return NextResponse.json({ error: 'Account not found' }, { status: 404 });
   }
+  await logAudit({
+    userId,
+    action: 'account.update',
+    targetType: 'FinancialAccount',
+    targetId: id,
+    metadata: parsed.data,
+    req,
+  });
   return NextResponse.json({ ok: true });
 }

@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { syncTransactionsForUser } from '@/lib/transactions';
+import { logAudit } from '@/lib/audit';
 
-export async function POST() {
+export async function POST(req: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -11,6 +12,12 @@ export async function POST() {
 
   try {
     const result = await syncTransactionsForUser(userId);
+    await logAudit({
+      userId,
+      action: 'plaid.sync',
+      metadata: result as unknown as Record<string, unknown>,
+      req,
+    });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error('Plaid transaction sync failed:', err);

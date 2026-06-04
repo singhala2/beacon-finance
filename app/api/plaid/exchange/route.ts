@@ -6,6 +6,7 @@ import { db } from '@/lib/db';
 import { plaid } from '@/lib/plaid';
 import { encrypt } from '@/lib/encryption';
 import { syncTransactionsForUser } from '@/lib/transactions';
+import { logAudit } from '@/lib/audit';
 
 const BodySchema = z.object({
   publicToken: z.string().min(1),
@@ -147,6 +148,15 @@ export async function POST(req: Request) {
       data: { onboardingStep: 2 },
     });
   }
+
+  await logAudit({
+    userId: session.user.id,
+    action: 'plaid.item.connect',
+    targetType: 'PlaidItem',
+    targetId: item.id,
+    metadata: { institutionName, accountCount: savedAccounts.length },
+    req,
+  });
 
   return NextResponse.json({
     ok: true,

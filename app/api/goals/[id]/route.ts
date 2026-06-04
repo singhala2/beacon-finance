@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 
 const PatchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -46,10 +47,18 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (result.count === 0) {
     return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
   }
+  await logAudit({
+    userId,
+    action: 'goal.update',
+    targetType: 'Goal',
+    targetId: id,
+    metadata: parsed.data,
+    req,
+  });
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
@@ -62,5 +71,12 @@ export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string 
   if (result.count === 0) {
     return NextResponse.json({ error: 'Goal not found' }, { status: 404 });
   }
+  await logAudit({
+    userId,
+    action: 'goal.delete',
+    targetType: 'Goal',
+    targetId: id,
+    req,
+  });
   return NextResponse.json({ ok: true });
 }

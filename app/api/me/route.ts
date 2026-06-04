@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 
 const PatchSchema = z.object({
   firstName: z.string().min(1).max(60).nullable().optional(),
@@ -23,6 +24,12 @@ export async function PATCH(req: Request) {
   }
 
   await db.user.update({ where: { id: userId }, data: parsed.data });
+  await logAudit({
+    userId,
+    action: 'settings.profile.update',
+    metadata: parsed.data,
+    req,
+  });
   return NextResponse.json({ ok: true });
 }
 
@@ -32,7 +39,7 @@ export async function DELETE() {
   if (!userId) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
 
   // Cascading deletes are wired at the schema level — removing the user
-  // takes everything with them.
+  // takes everything with them, including audit logs, so we don't log this.
   await db.user.delete({ where: { id: userId } });
   return NextResponse.json({ ok: true });
 }

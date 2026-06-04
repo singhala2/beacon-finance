@@ -42,6 +42,7 @@ model User {
   transactions      Transaction[]
   conversations     Conversation[]
   insights          Insight[]
+  auditLogs         AuditLog[]
 }
 
 model Insight {
@@ -221,4 +222,20 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  action     String   // e.g. plaid.item.connect, auth.signin, account.delete
+  targetType String?  // e.g. PlaidItem, FinancialAccount, Goal
+  targetId   String?
+  metadata   Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
 }

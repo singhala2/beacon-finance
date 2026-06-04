@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { logAudit } from '@/lib/audit';
 
 const GoalSchema = z.object({
   name: z.string().min(1).max(200),
@@ -41,6 +42,14 @@ export async function POST(req: Request) {
         targetDate: g.targetDate ? new Date(g.targetDate) : null,
         monthlyContribution: g.monthlyContribution ?? null,
       },
+    });
+    await logAudit({
+      userId,
+      action: 'goal.create',
+      targetType: 'Goal',
+      targetId: created.id,
+      metadata: { name: g.name, type: g.type },
+      req,
     });
     return NextResponse.json({ ok: true, goal: created });
   }
