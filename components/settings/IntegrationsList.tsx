@@ -41,7 +41,7 @@ export function IntegrationsList({ items }: Props) {
 
   const connectButton = (
     <PlaidLinkButton
-      onSuccess={() => router.refresh()}
+      onSuccess={() => window.location.reload()}
       style={{ width: '100%', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer' }}
     >
       <div

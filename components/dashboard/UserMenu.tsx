@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { signOut } from 'next-auth/react';
 
 type Props = {
@@ -8,6 +9,12 @@ type Props = {
   trigger: 'expanded' | 'collapsed';
   initials: string;
 };
+
+const SETTINGS_LINKS = [
+  { href: '/settings', label: 'Profile' },
+  { href: '/settings/integrations', label: 'Integrations' },
+  { href: '/settings/data', label: 'Data' },
+];
 
 export function UserMenu({ user, trigger, initials }: Props) {
   const [open, setOpen] = useState(false);
@@ -164,6 +171,27 @@ export function UserMenu({ user, trigger, initials }: Props) {
               {user.email}
             </div>
           </div>
+          {SETTINGS_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              role="menuitem"
+              onClick={() => setOpen(false)}
+              style={{
+                display: 'block',
+                padding: '8px 10px',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 13,
+                color: 'var(--color-text)',
+                textDecoration: 'none',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--color-bg-3)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+            >
+              {link.label}
+            </Link>
+          ))}
+          <div style={{ borderTop: '1px solid var(--color-line)', margin: '4px 0' }} />
           <button
             onClick={handleSignOut}
             disabled={signingOut}
