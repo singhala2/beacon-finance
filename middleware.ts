@@ -1,10 +1,20 @@
 import { type NextRequest, NextResponse } from 'next/server';
+import { authLimit, extractIp, tooManyRequests } from '@/lib/ratelimit';
 
 // Middleware runs on the Edge runtime where Prisma (database sessions) is not
 // available. Check for the session cookie as a lightweight proxy for "authed";
 // server components still call auth() + Prisma for real validation.
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // IP-based rate limit on auth-mutating endpoints (signin form + magic-link
+  // callback) to make password-spray / link-flood brute-force expensive.
+  const isAuthMutation =
+    req.method === 'POST' && pathname.startsWith('/api/auth/');
+  if (isAuthMutation) {
+    const rl = await authLimit.limit(extractIp(req));
+    if (!rl.success) return tooManyRequests(rl);
+  }
 
   const sessionToken =
     req.cookies.get('authjs.session-token')?.value ??

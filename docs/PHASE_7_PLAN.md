@@ -18,7 +18,7 @@ Each is independently shippable. Commit and push after each.
 |----|-----------|------------|--------|
 | 7A | Security headers + CSP | `next.config.ts` returns `Content-Security-Policy`, `Strict-Transport-Security`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy` on every response. CSP allows only the origins we actually use (self, Anthropic, Plaid, Sentry, Resend). Verified with `curl -I` against a running dev server. | ✅ done |
 | 7B | Audit log | New `AuditLog` Prisma model. `logAudit()` helper in `lib/audit.ts`. Emit events on: signin, signout, Plaid item connect/disconnect, account rename/hide, transaction sync, goal create/delete, settings change, data export, account deletion. Visible in a `/settings/data` read-only table. | ✅ done |
-| 7C | Rate limiting | `@upstash/ratelimit` + Upstash Redis. Per-IP limits on auth + signin magic link. Per-user limits on Plaid exchange/sync, chat, insights generation, export. 429s render a friendly toast in the UI, not a raw error. | ⏳ not started |
+| 7C | Rate limiting | `@upstash/ratelimit` + Upstash Redis. Per-IP limits on auth + signin magic link. Per-user limits on Plaid exchange/sync, chat, insights generation, export. 429s render a friendly toast in the UI, not a raw error. | ✅ done |
 | 7D | Sentry error monitoring | `@sentry/nextjs` wired for server, client, edge runtimes. User id tagged on capture; PII (emails, account numbers, access tokens) scrubbed from breadcrumbs and request bodies. One deliberate test error confirmed visible in the Sentry dashboard. Source-map upload deferred (no `SENTRY_AUTH_TOKEN`). | ⏳ not started |
 | 7E | Legal: privacy policy + ToS + clickwrap | See expanded breakdown below. Ships as a single sub-milestone but several files. | ⏳ not started |
 | 7F | Prod polish | Cron route authed via `CRON_SECRET` header. Env-var validation at boot (zod schema in `lib/env.ts`, fails fast with a clear message if anything required is missing). Replace stray `console.*` (6 occurrences) with a minimal `lib/logger.ts` wrapper that no-ops in tests and structured-logs in prod. `pnpm build` runs clean. `pnpm exec tsc --noEmit` runs clean. | ✅ done |
@@ -119,7 +119,7 @@ CSP built from a structured directives object so additions stay readable. Dev re
 Schema applied via `pnpm db:push` (project has no migrations dir — uses push for additive changes; switching to migrations is its own task, flagged in 7F notes when we get there). `logAudit` is awaited but try/catches its own errors so an audit failure can't surface as a 5xx to the user. Account-delete is not logged because the cascade wipes the audit row along with the user; would need a separate audit sink to keep that trace, deferred to launch-time work.
 
 ### 7C notes
-_(empty)_
+Limits: auth 5/min IP (middleware), Plaid 10/min user (exchange + sync), chat 30/min user, insights gen 3/hour user, export 3/day user. `lib/ratelimit.ts` wraps `@upstash/ratelimit` with a no-op fallback when Upstash env vars are absent (so contributors can run dev without an account). 429 response is JSON with `resetAt`, plus `X-RateLimit-*` and `Retry-After` headers. Burst-tested middleware path: 5×302, 6th = 429. UI does not yet render a custom toast for 429 — client just falls through to the existing error-handling paths; revisit if it bites in practice.
 
 ### 7D notes
 _(empty)_

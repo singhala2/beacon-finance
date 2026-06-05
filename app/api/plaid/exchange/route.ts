@@ -8,6 +8,7 @@ import { encrypt } from '@/lib/encryption';
 import { syncTransactionsForUser } from '@/lib/transactions';
 import { logAudit } from '@/lib/audit';
 import { log } from '@/lib/logger';
+import { plaidLimit, tooManyRequests } from '@/lib/ratelimit';
 
 const BodySchema = z.object({
   publicToken: z.string().min(1),
@@ -20,6 +21,9 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
   }
+
+  const rl = await plaidLimit.limit(session.user.id);
+  if (!rl.success) return tooManyRequests(rl);
 
   const json = await req.json().catch(() => null);
   const parsed = BodySchema.safeParse(json);

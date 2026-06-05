@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
+import { exportLimit, tooManyRequests } from '@/lib/ratelimit';
 
 // Returns a full JSON export of the user's data. Plaid access tokens are
 // excluded — those are encryption-protected internal credentials, not user
@@ -10,6 +11,9 @@ export async function GET(req: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
+
+  const rl = await exportLimit.limit(userId);
+  if (!rl.success) return tooManyRequests(rl);
 
   const user = await db.user.findUnique({
     where: { id: userId },

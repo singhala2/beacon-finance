@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { anthropic, CHAT_MODEL } from '@/lib/anthropic';
 import { buildSystemPrompt } from '@/lib/system-prompt';
 import { log } from '@/lib/logger';
+import { chatLimit, tooManyRequests } from '@/lib/ratelimit';
 
 const MessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -28,6 +29,11 @@ export async function POST(req: Request) {
       status: 401,
       headers: { 'content-type': 'application/json' },
     });
+  }
+
+  const rl = await chatLimit.limit(userId);
+  if (!rl.success) {
+    return tooManyRequests(rl);
   }
 
   const json = await req.json().catch(() => null);
