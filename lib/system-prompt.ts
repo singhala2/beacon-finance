@@ -103,12 +103,14 @@ export async function buildUserContextSnippet(userId: string): Promise<UserConte
     .reduce((s, a) => s + (a.balanceCurrent ?? 0), 0);
   const investable = holdings.reduce((s, h) => s + h.currentValue, 0);
   const debtTotal = accounts
-    .filter((a) => a.type === 'credit')
+    .filter((a) => a.type === 'credit' || a.type === 'loan')
     .reduce((s, a) => s + Math.abs(a.balanceCurrent ?? 0), 0);
-  const netWorth = accounts.reduce((s, a) => {
-    const bal = a.balanceCurrent ?? 0;
-    return s + (a.type === 'credit' ? -Math.abs(bal) : bal);
-  }, 0) + investable;
+  const netWorth =
+    accounts.reduce((s, a) => {
+      const bal = a.balanceCurrent ?? 0;
+      if (a.type === 'credit' || a.type === 'loan') return s - Math.abs(bal);
+      return s + bal;
+    }, 0) + investable;
 
   return {
     displayName,

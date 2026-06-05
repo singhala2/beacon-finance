@@ -2,6 +2,7 @@ import type { Transaction as PlaidTransaction, RemovedTransaction } from 'plaid'
 import { db } from '@/lib/db';
 import { plaid } from '@/lib/plaid';
 import { decrypt } from '@/lib/encryption';
+import { isDemoToken } from '@/lib/sandbox-persona';
 
 type SyncResult = {
   added: number;
@@ -24,6 +25,8 @@ export async function syncTransactionsForUser(userId: string): Promise<SyncResul
 
   for (const item of items) {
     const accessToken = decrypt(item.accessToken);
+    // Synthetic demo personas don't have a real Plaid token; skip sync.
+    if (isDemoToken(accessToken)) continue;
     const accountByPlaidId = new Map(
       item.accounts
         .filter((a) => a.plaidAccountId !== null)

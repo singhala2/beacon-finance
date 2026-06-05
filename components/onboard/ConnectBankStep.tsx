@@ -10,6 +10,7 @@ import { formatCurrency } from '@/lib/format';
 
 type Props = {
   initial: ConnectedAccount[];
+  sandboxMode?: boolean;
 };
 
 function AccountRow({ a }: { a: ConnectedAccount }) {
@@ -59,10 +60,12 @@ function AccountRow({ a }: { a: ConnectedAccount }) {
   );
 }
 
-export function ConnectBankStep({ initial }: Props) {
+export function ConnectBankStep({ initial, sandboxMode = false }: Props) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [accounts, setAccounts] = useState<ConnectedAccount[]>(initial);
+  const [seeding, setSeeding] = useState(false);
+  const [seedError, setSeedError] = useState<string | null>(null);
 
   const bankAccounts = accounts.filter((a) => a.type === 'depository' || a.type === 'credit');
   const isConnected = bankAccounts.length > 0;
@@ -73,6 +76,31 @@ export function ConnectBankStep({ initial }: Props) {
       const existingIds = new Set(prev.map((a) => a.id));
       return [...prev, ...bankOnly.filter((a) => !existingIds.has(a.id))];
     });
+  }
+
+  async function seedDemoPersona() {
+    setSeedError(null);
+    setSeeding(true);
+    try {
+      const res = await fetch('/api/plaid/sandbox-seed', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ wipeExisting: true }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        accounts?: ConnectedAccount[];
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setSeedError(data.error ?? 'Could not seed demo persona.');
+        return;
+      }
+      // Hard reload so server-rendered onboarding state reflects new accounts.
+      window.location.reload();
+    } finally {
+      setSeeding(false);
+    }
   }
 
   function advance() {
@@ -122,6 +150,41 @@ export function ConnectBankStep({ initial }: Props) {
           {isConnected ? bankAccounts.map((a) => <AccountRow key={a.id} a={a} />) : null}
         </PlaidConnectCard>
       </div>
+
+      {sandboxMode && !isConnected && (
+        <div style={{ marginBottom: 12 }}>
+          <button
+            onClick={seedDemoPersona}
+            disabled={seeding}
+            style={{
+              width: '100%',
+              background: 'transparent',
+              border: '1px dashed var(--color-mint)',
+              borderRadius: 'var(--radius-md)',
+              padding: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              color: 'var(--color-mint)',
+              fontSize: 13,
+              fontFamily: 'var(--font-sans)',
+              cursor: seeding ? 'wait' : 'pointer',
+            }}
+          >
+            <SparkleIcon size={14} color="var(--color-mint)" />
+            {seeding ? 'Loading demo persona…' : 'Use demo persona (recent grad)'}
+          </button>
+          <p style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-dim)', textAlign: 'center' }}>
+            Sandbox only. Wipes any existing connections and seeds 7 accounts with 90 days of synthetic data.
+          </p>
+          {seedError && (
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-danger)', textAlign: 'center' }}>
+              {seedError}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Manual add — deferred */}
       <button

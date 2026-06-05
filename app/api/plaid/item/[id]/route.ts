@@ -5,6 +5,7 @@ import { plaid } from '@/lib/plaid';
 import { decrypt } from '@/lib/encryption';
 import { logAudit } from '@/lib/audit';
 import { log } from '@/lib/logger';
+import { isDemoToken } from '@/lib/sandbox-persona';
 
 // Disconnects a Plaid institution. Revokes the access token with Plaid (best
 // effort) so we stop incurring API calls, then deletes the PlaidItem locally.
@@ -26,10 +27,13 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
   }
 
   // Revoke with Plaid first; failure is non-fatal since the row is going away
-  // anyway and the access token is encrypted at rest.
+  // anyway and the access token is encrypted at rest. Demo persona tokens skip
+  // the Plaid call (they have no real token to revoke).
   try {
     const accessToken = decrypt(item.accessToken);
-    await plaid.itemRemove({ access_token: accessToken });
+    if (!isDemoToken(accessToken)) {
+      await plaid.itemRemove({ access_token: accessToken });
+    }
   } catch (err) {
     log.warn('Plaid itemRemove failed (non-fatal)', { err, itemId: item.id });
   }

@@ -212,7 +212,12 @@ function renderStep(
         />
       );
     case 2:
-      return <ConnectBankStep initial={bankAccounts} />;
+      return (
+        <ConnectBankStep
+          initial={bankAccounts}
+          sandboxMode={(process.env.PLAID_ENV ?? 'sandbox') !== 'production'}
+        />
+      );
     case 3:
       return <InvestmentsStep initial={investmentAccounts} />;
     case 4:
