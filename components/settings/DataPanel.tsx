@@ -7,11 +7,35 @@ import { Card } from '@/components/dashboard/Card';
 
 const DELETE_PHRASE = 'delete my account';
 
-export function DataPanel() {
+type Props = {
+  sandboxMode?: boolean;
+};
+
+export function DataPanel({ sandboxMode = false }: Props) {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [phrase, setPhrase] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [confirmingRestart, setConfirmingRestart] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [restartError, setRestartError] = useState<string | null>(null);
+
+  async function restartOnboarding() {
+    setRestartError(null);
+    setRestarting(true);
+    try {
+      const res = await fetch('/api/me/restart-onboarding', { method: 'POST' });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        setRestartError(data.error ?? 'Could not reset. Try again.');
+        return;
+      }
+      // Hard-navigate so server components rebuild against the fresh state.
+      window.location.assign('/onboard/1');
+    } finally {
+      setRestarting(false);
+    }
+  }
 
   function deleteAccount() {
     if (phrase.trim().toLowerCase() !== DELETE_PHRASE) {
@@ -43,6 +67,48 @@ export function DataPanel() {
           </BBtn>
         </a>
       </Card>
+
+      {sandboxMode && (
+        <Card
+          style={{
+            background: 'color-mix(in oklab, var(--color-mint) 4%, var(--color-bg-2))',
+            border: '1px solid color-mix(in oklab, var(--color-mint) 30%, transparent)',
+          }}
+        >
+          <Eyebrow color="var(--color-mint)" style={{ marginBottom: 6 }}>
+            Restart onboarding (sandbox)
+          </Eyebrow>
+          <div style={{ fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.5, marginBottom: 12 }}>
+            Wipes your profile fields, connected accounts, goals, conversations, and insights, then sends you back to onboarding step 1. Keeps your identity and audit log. Useful for re-running the onboarding demo without signing out. Only visible while `PLAID_ENV` is not production.
+          </div>
+
+          {confirmingRestart ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {restartError && <div style={{ fontSize: 13, color: 'var(--color-danger)' }}>{restartError}</div>}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <BBtn variant="primary" size="md" onClick={restartOnboarding} disabled={restarting}>
+                  {restarting ? 'Resetting…' : 'Reset and restart'}
+                </BBtn>
+                <BBtn
+                  variant="ghost"
+                  size="md"
+                  onClick={() => {
+                    setConfirmingRestart(false);
+                    setRestartError(null);
+                  }}
+                  disabled={restarting}
+                >
+                  Cancel
+                </BBtn>
+              </div>
+            </div>
+          ) : (
+            <BBtn variant="ghost" size="md" onClick={() => setConfirmingRestart(true)}>
+              Restart onboarding
+            </BBtn>
+          )}
+        </Card>
+      )}
 
       <Card
         style={{

@@ -14,9 +14,11 @@ export default async function SettingsDataPage() {
     select: { id: true, action: true, targetType: true, metadata: true, createdAt: true },
   });
 
+  const sandboxMode = (process.env.PLAID_ENV ?? 'sandbox') !== 'production';
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
-      <DataPanel />
+      <DataPanel sandboxMode={sandboxMode} />
       <RecentActivityPanel
         entries={entries.map((e) => ({
           id: e.id,
