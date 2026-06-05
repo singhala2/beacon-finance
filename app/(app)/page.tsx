@@ -17,6 +17,7 @@ import { generateBriefs, type Brief } from '@/lib/insights';
 import type { BriefTag } from '@/components/dashboard/BriefCard';
 import { formatCurrency } from '@/lib/format';
 import { resolveLayout, DEFAULT_LAYOUT, type CardId } from '@/lib/dashboard-layout';
+import { computeComposition, computeNetWorthHistory } from '@/lib/networth';
 import type { ReactNode } from 'react';
 
 type AllocationBucket = 'stocks' | 'bonds' | 'cash' | 'crypto' | 'other';
@@ -77,7 +78,9 @@ export default async function DashboardHome({ searchParams }: Props) {
   const currentMonthStart = startOfMonth(now);
   const priorMonthStart = startOfMonth(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)));
 
-  const [user, accounts, holdings, goals, transactionCount, monthTxs, recentTxs, dbInsights] = await Promise.all([
+  const historyWindowStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - 90 * 86_400_000);
+
+  const [user, accounts, holdings, goals, transactionCount, monthTxs, recentTxs, dbInsights, historyTxs] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
       select: { firstName: true, email: true, dashboardLayout: true },
@@ -97,7 +100,7 @@ export default async function DashboardHome({ searchParams }: Props) {
     }),
     db.holding.findMany({
       where: { account: { userId } },
-      select: { id: true, symbol: true, name: true, currentValue: true, type: true },
+      select: { id: true, accountId: true, symbol: true, name: true, currentValue: true, type: true },
     }),
     db.goal.findMany({
       where: { userId, deletedAt: null },
@@ -126,6 +129,10 @@ export default async function DashboardHome({ searchParams }: Props) {
       orderBy: { createdAt: 'desc' },
       take: 3,
     }),
+    db.transaction.findMany({
+      where: { userId, date: { gte: historyWindowStart } },
+      select: { date: true, amount: true, accountId: true },
+    }),
   ]);
 
   if (!user) return null;
@@ -133,14 +140,12 @@ export default async function DashboardHome({ searchParams }: Props) {
   const layout = user.dashboardLayout ? resolveLayout(user.dashboardLayout) : DEFAULT_LAYOUT;
   const needsInitialSync = accounts.length > 0 && transactionCount === 0;
 
-  // Net worth
-  const netWorth = accounts.reduce((sum, a) => {
-    const bal = a.balanceCurrent ?? 0;
-    return sum + (a.type === 'credit' ? -Math.abs(bal) : bal);
-  }, 0);
-  const debtTotal = accounts
-    .filter((a) => a.type === 'credit')
-    .reduce((sum, a) => sum + Math.abs(a.balanceCurrent ?? 0), 0);
+  // Net worth + composition (loan + credit both count as debt; computeComposition
+  // unifies the logic that used to drift between page.tsx and system-prompt.ts).
+  const composition = computeComposition(accounts, holdings);
+  const netWorth = composition.total;
+  const debtTotal = composition.debt;
+  const networthHistory = computeNetWorthHistory(accounts, holdings, historyTxs, 90);
 
   // Allocation
   const allocationRaw: Record<AllocationBucket, number> = {
@@ -277,6 +282,8 @@ export default async function DashboardHome({ searchParams }: Props) {
           accountCount: accounts.length,
           monthLabel,
           insightLine,
+          composition,
+          history: networthHistory,
         }}
         topSlot={
           <>

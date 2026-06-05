@@ -1,6 +1,8 @@
 import { HeroShell } from './HeroShell';
+import { HeroNetWorth } from './HeroNetWorth';
 import { formatCurrency } from '@/lib/format';
 import type { HeroId } from '@/lib/dashboard-layout';
+import type { Composition, HistoryPoint } from '@/lib/networth';
 
 export type HeroData = {
   netWorth: number;
@@ -11,6 +13,8 @@ export type HeroData = {
   accountCount: number;
   monthLabel: string;
   insightLine?: string;
+  composition: Composition;
+  history: HistoryPoint[];
 };
 
 type Props = {
@@ -27,16 +31,12 @@ export function Hero({ variant, data, editing, onClick }: Props) {
   switch (variant) {
     case 'networth':
       return (
-        <HeroShell
-          eyebrow="Net worth"
-          value={fmt(data.netWorth)}
-          valueColor={data.netWorth >= 0 ? 'var(--color-text)' : 'var(--color-warn)'}
-          subline={
-            <>
-              {data.accountCount} account{data.accountCount === 1 ? '' : 's'}
-              {data.debt > 0 ? ` · ${fmt(data.debt)} debt` : ''}
-            </>
-          }
+        <HeroNetWorth
+          netWorth={data.netWorth}
+          debt={data.debt}
+          accountCount={data.accountCount}
+          composition={data.composition}
+          history={data.history}
           insightLine={data.insightLine}
           editing={editing}
           onClick={onClick}
