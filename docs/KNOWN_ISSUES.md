@@ -6,6 +6,16 @@ Add a new entry as a new `##` section. Move to a `## Resolved` heading (with the
 
 ---
 
+## Stale-terms-version re-prompt is not wired
+
+**Surface:** A user whose `acceptedTermsVersion` does not match the current `TERMS_VERSION` constant (because we updated the policies after they last signed in) is not prompted to re-accept. They can continue using the product without seeing the new version.
+
+**Diagnosis:** 7E shipped the schema (`User.acceptedTermsVersion`) and the helper (`termsAreStale()` in `lib/terms.ts`), but no layout check redirects stale users to a re-acceptance flow.
+
+**Fix when:** before any non-test user ever signs up under a policy that has been updated since their last acceptance. Implementation sketch: in `app/(app)/layout.tsx`, after the existing `auth()` lookup, fetch `acceptedTermsVersion` for the user, call `termsAreStale(...)`, and if true, redirect to a new `/terms/accept` route. That route renders a minimal page showing the new content and a single "Accept and continue" button that POSTs to a server action which writes the new version + timestamp back, then redirects to `/`.
+
+---
+
 ## Plaid Link refresh race after Connect institution
 
 **Surface:** `/settings/integrations` → "+ Connect another institution" → complete the Sandbox flow → expected the list to refresh with the new institution; sometimes it does not.

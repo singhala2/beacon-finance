@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { DSidebar } from './DSidebar';
 import { DTopbar } from './DTopbar';
+import { Footer } from '@/components/legal/Footer';
 
 export type RecentChat = { id: string; title: string; updatedAt: string };
 
@@ -65,6 +66,7 @@ export function DashboardShell({ user, accountCount, syncedAt, recentChats, chil
         />
         <div style={{ flex: 1, overflow: 'auto', padding: '20px 28px 32px' }}>
           {children}
+          <Footer />
         </div>
       </div>
     </div>

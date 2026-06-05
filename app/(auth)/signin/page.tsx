@@ -9,6 +9,7 @@ import { BBtn, BeaconLogo, BInput, ArrowIcon } from '@/components/ui';
 export default function SignInPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -16,6 +17,10 @@ export default function SignInPage() {
     setError(null);
     if (!email.trim() || !email.includes('@')) {
       setError('Enter a valid email.');
+      return;
+    }
+    if (!accepted) {
+      setError('Please agree to the Terms and Privacy Policy.');
       return;
     }
 
@@ -117,13 +122,44 @@ export default function SignInPage() {
           </div>
         )}
 
-        <div style={{ marginTop: 20 }}>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            marginTop: 20,
+            fontSize: 12.5,
+            color: 'var(--color-text-muted)',
+            lineHeight: 1.55,
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={accepted}
+            onChange={(e) => setAccepted(e.target.checked)}
+            style={{ marginTop: 3, accentColor: 'var(--color-mint)' }}
+          />
+          <span>
+            I agree to the{' '}
+            <Link href="/terms" style={{ color: 'var(--color-mint)' }}>
+              Terms
+            </Link>{' '}
+            and{' '}
+            <Link href="/privacy" style={{ color: 'var(--color-mint)' }}>
+              Privacy Policy
+            </Link>
+            .
+          </span>
+        </label>
+
+        <div style={{ marginTop: 16 }}>
           <BBtn
             variant="primary"
             size="lg"
             fullWidth
             onClick={submit}
-            disabled={isPending}
+            disabled={isPending || !accepted}
             trailing={<ArrowIcon size={16} color="var(--color-mint-ink)" />}
           >
             {isPending ? 'Sending…' : 'Send magic link'}
@@ -132,14 +168,12 @@ export default function SignInPage() {
 
         <div
           style={{
-            marginTop: 28,
+            marginTop: 24,
             fontSize: 12,
             color: 'var(--color-text-dim)',
             textAlign: 'center',
-            lineHeight: 1.5,
           }}
         >
-          By continuing you agree to our terms and privacy policy.{' '}
           <Link href="/welcome" style={{ color: 'var(--color-text-muted)' }}>
             Back
           </Link>

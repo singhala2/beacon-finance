@@ -93,6 +93,26 @@ export function PlaidConnectCard({ title, subline, badge, onSuccess, children }:
           {children}
         </div>
       )}
+
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 11,
+          color: 'var(--color-text-dim)',
+          lineHeight: 1.5,
+        }}
+      >
+        By continuing you also agree to{' '}
+        <a
+          href="https://plaid.com/legal/#end-user-privacy-policy"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ color: 'var(--color-text-muted)' }}
+        >
+          Plaid&apos;s End User Privacy Policy
+        </a>
+        . Beacon receives read-only access tokens — never your bank credentials.
+      </div>
     </div>
   );
 }

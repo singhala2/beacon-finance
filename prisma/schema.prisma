@@ -34,6 +34,11 @@ model User {
   // Phase 5: throttle for insight regeneration so cron + manual refresh don't double up
   lastInsightGeneratedAt DateTime?
 
+  // Phase 7: clickwrap acceptance. acceptedTermsVersion mismatch with current
+  // TERMS_VERSION constant triggers a re-prompt at next signin / page load.
+  acceptedTermsAt      DateTime?
+  acceptedTermsVersion String?
+
   authAccounts      AuthAccount[]
   sessions          Session[]
   plaidItems        PlaidItem[]
