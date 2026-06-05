@@ -3,6 +3,7 @@ import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { anthropic, CHAT_MODEL } from '@/lib/anthropic';
 import { buildSystemPrompt } from '@/lib/system-prompt';
+import { log } from '@/lib/logger';
 
 const MessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -113,7 +114,7 @@ export async function POST(req: Request) {
         send({ type: 'done' });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Chat failed';
-        console.error('Anthropic stream error:', err);
+        log.error('Anthropic stream error', { err });
         send({ type: 'error', message });
       } finally {
         controller.close();

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { generateInsightsForUser } from '@/lib/insights-ai';
+import { log } from '@/lib/logger';
 
 const MIN_REGEN_INTERVAL_MS = 30 * 60 * 1000; // 30 min throttle for manual refresh
 
@@ -53,7 +54,7 @@ export async function POST() {
     });
     return NextResponse.json({ ok: true, generated: result.generated, insights });
   } catch (err) {
-    console.error('Insight generation failed:', err);
+    log.error('Insight generation failed', { err });
     return NextResponse.json({ error: 'Generation failed' }, { status: 500 });
   }
 }

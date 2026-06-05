@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { log } from '@/lib/logger';
 
 export type AuditAction =
   | 'auth.signin'
@@ -41,7 +42,7 @@ export async function logAudit(args: LogAuditArgs): Promise<void> {
     });
   } catch (err) {
     // Audit failures must not break the user-facing action.
-    console.error('logAudit failed:', err);
+    log.error('logAudit failed', { err, action });
   }
 }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { syncTransactionsForUser } from '@/lib/transactions';
 import { logAudit } from '@/lib/audit';
+import { log } from '@/lib/logger';
 
 export async function POST(req: Request) {
   const session = await auth();
@@ -20,7 +21,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
-    console.error('Plaid transaction sync failed:', err);
+    log.error('Plaid transaction sync failed', { err, userId });
     return NextResponse.json({ error: 'Sync failed' }, { status: 500 });
   }
 }

@@ -21,7 +21,7 @@ Each is independently shippable. Commit and push after each.
 | 7C | Rate limiting | `@upstash/ratelimit` + Upstash Redis. Per-IP limits on auth + signin magic link. Per-user limits on Plaid exchange/sync, chat, insights generation, export. 429s render a friendly toast in the UI, not a raw error. | ⏳ not started |
 | 7D | Sentry error monitoring | `@sentry/nextjs` wired for server, client, edge runtimes. User id tagged on capture; PII (emails, account numbers, access tokens) scrubbed from breadcrumbs and request bodies. One deliberate test error confirmed visible in the Sentry dashboard. Source-map upload deferred (no `SENTRY_AUTH_TOKEN`). | ⏳ not started |
 | 7E | Legal: privacy policy + ToS + clickwrap | See expanded breakdown below. Ships as a single sub-milestone but several files. | ⏳ not started |
-| 7F | Prod polish | Cron route authed via `CRON_SECRET` header. Env-var validation at boot (zod schema in `lib/env.ts`, fails fast with a clear message if anything required is missing). Replace stray `console.*` (6 occurrences) with a minimal `lib/logger.ts` wrapper that no-ops in tests and structured-logs in prod. `pnpm build` runs clean. `pnpm exec tsc --noEmit` runs clean. | ⏳ not started |
+| 7F | Prod polish | Cron route authed via `CRON_SECRET` header. Env-var validation at boot (zod schema in `lib/env.ts`, fails fast with a clear message if anything required is missing). Replace stray `console.*` (6 occurrences) with a minimal `lib/logger.ts` wrapper that no-ops in tests and structured-logs in prod. `pnpm build` runs clean. `pnpm exec tsc --noEmit` runs clean. | ✅ done |
 | 7G | `/.well-known/security.txt` | Static file under `public/.well-known/security.txt` per RFC 9116: contact, preferred languages, expiration. Cheap, expected for fintech. | ⏳ not started |
 
 ### 7E breakdown (expanded scope)
@@ -128,7 +128,7 @@ _(empty)_
 _(empty)_
 
 ### 7F notes
-_(empty)_
+Cron auth was already in place from Phase 5 work, just verified. `lib/env.ts` validates required keys (DATABASE_URL, AUTH_SECRET, AUTH_RESEND_KEY, AUTH_EMAIL_FROM, PLAID_CLIENT_ID/SECRET, ENCRYPTION_KEY as 64-hex, ANTHROPIC_API_KEY, CRON_SECRET) and warns on optional gaps (Upstash, Sentry) so dev still boots without them. `instrumentation.ts` runs it on Node-runtime boot only (Edge skips). `lib/logger.ts` is a 30-line wrapper: pretty `[err]`/`[warn]`/`[info]` in dev, single-line JSON in prod, no-op in test. Serializes `Error` objects into `{name,message,stack}` so prod logs stay parseable. Found 7 `console.*` sites (one more than the plan said) — all swapped.
 
 ### 7G notes
 _(empty)_

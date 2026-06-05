@@ -4,6 +4,7 @@ import { db } from '@/lib/db';
 import { plaid } from '@/lib/plaid';
 import { decrypt } from '@/lib/encryption';
 import { logAudit } from '@/lib/audit';
+import { log } from '@/lib/logger';
 
 // Disconnects a Plaid institution. Revokes the access token with Plaid (best
 // effort) so we stop incurring API calls, then deletes the PlaidItem locally.
@@ -30,7 +31,7 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const accessToken = decrypt(item.accessToken);
     await plaid.itemRemove({ access_token: accessToken });
   } catch (err) {
-    console.error('Plaid itemRemove failed (non-fatal):', err);
+    log.warn('Plaid itemRemove failed (non-fatal)', { err, itemId: item.id });
   }
 
   await db.plaidItem.delete({ where: { id: item.id } });

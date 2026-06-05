@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { generateInsightsForUser } from '@/lib/insights-ai';
+import { log } from '@/lib/logger';
 
 const MAX_PER_INVOCATION = 100;
 
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
       await generateInsightsForUser(u.id);
       succeeded++;
     } catch (err) {
-      console.error(`Insights generation failed for user ${u.id}:`, err);
+      log.error('Insights generation failed', { err, userId: u.id });
       failed++;
     }
   }

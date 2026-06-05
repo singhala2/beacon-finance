@@ -7,6 +7,7 @@ import { plaid } from '@/lib/plaid';
 import { encrypt } from '@/lib/encryption';
 import { syncTransactionsForUser } from '@/lib/transactions';
 import { logAudit } from '@/lib/audit';
+import { log } from '@/lib/logger';
 
 const BodySchema = z.object({
   publicToken: z.string().min(1),
@@ -134,7 +135,7 @@ export async function POST(req: Request) {
   try {
     await syncTransactionsForUser(session.user.id);
   } catch (err) {
-    console.error('Initial transaction sync failed:', err);
+    log.error('Initial transaction sync failed', { err, userId: session.user.id });
   }
 
   // Advance onboarding step if still at step 1
