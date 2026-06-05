@@ -40,6 +40,23 @@ export type PlaidUserCustom = {
   override_accounts: PlaidAccountOverride[];
 };
 
+// Persona transaction as we'll write it to the DB after exchange. Plaid's
+// transactionsSync is not reliable for custom users — it sometimes returns
+// auto-generated transactions or only a subset of what we sent in the
+// user_custom payload. Writing this set directly into the DB after exchange
+// guarantees the dashboard shows the persona's exact spending pattern.
+export type PersonaTransactionSeed = {
+  accountType: 'depository' | 'credit' | 'loan' | 'investment';
+  accountSubtype: string;
+  plaidTransactionId: string;
+  date: Date;
+  amount: number; // positive = outflow (Plaid convention)
+  name: string;
+  merchantName: string | null;
+  category: string | null;
+  subcategory: string | null;
+};
+
 const SEED = 'beacon-recent-grad-v2';
 const DAY_MS = 86_400_000;
 const TODAY = () => new Date();
@@ -331,4 +348,127 @@ function creditCardTransactions(today: Date): PlaidTransaction[] {
   }
 
   return out;
+}
+
+// ---------- DB-format seeds (post-exchange override) ----------
+
+type Seed = Omit<PersonaTransactionSeed, 'plaidTransactionId'>;
+
+function seed(
+  accountType: PersonaTransactionSeed['accountType'],
+  accountSubtype: string,
+  date: Date,
+  amount: number,
+  name: string,
+  category: string | null,
+  subcategory: string | null,
+  merchantName: string | null = null,
+): Seed {
+  return { accountType, accountSubtype, date, amount, name, merchantName, category, subcategory };
+}
+
+export function buildPersonaTransactionSeeds(): PersonaTransactionSeed[] {
+  const today = TODAY();
+  const seeds: Seed[] = [];
+
+  // ----- Checking -----
+  for (let i = 0; i < 6; i++) {
+    seeds.push(
+      seed('depository', 'checking', daysAgo(today, 7 + i * 14), -3_650.0, 'ACME Corp Payroll', 'INCOME', 'INCOME_WAGES', 'ACME Corp'),
+    );
+  }
+  for (let m = 0; m < 3; m++) {
+    seeds.push(
+      seed('depository', 'checking', monthDay(today, m + 1, 1), 1_750.0, 'Maple Street Apartments — Rent', 'RENT_AND_UTILITIES', 'RENT_AND_UTILITIES_RENT', 'Maple Street Apartments'),
+    );
+    seeds.push(
+      seed('depository', 'checking', monthDay(today, m + 1, 5), 260.0, 'MOHELA Federal Loan Servicing', 'LOAN_PAYMENTS', 'LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT', 'MOHELA'),
+    );
+    seeds.push(
+      seed('depository', 'checking', monthDay(today, m + 1, 8), 1_000.0, 'Transfer to High-Yield Savings', 'TRANSFER_OUT', 'TRANSFER_OUT_SAVINGS', 'Internal Transfer'),
+    );
+  }
+  const subs: Array<[number, string, number, string]> = [
+    [7, 'Netflix', 15.49, 'ENTERTAINMENT'],
+    [12, 'Spotify Family', 16.99, 'ENTERTAINMENT'],
+    [20, 'NYT All Access', 5.0, 'ENTERTAINMENT'],
+    [18, 'PG&E Electric', 64.32, 'RENT_AND_UTILITIES'],
+    [25, 'Sonic.net Internet', 75.0, 'RENT_AND_UTILITIES'],
+    [1, 'CrossFit Membership', 165.0, 'PERSONAL_CARE'],
+  ];
+  for (let m = 0; m < 3; m++) {
+    for (const [day, name, amt, cat] of subs) {
+      seeds.push(seed('depository', 'checking', monthDay(today, m + 1, day), amt, name, cat, null, name));
+    }
+  }
+  const ccPayments = [400, 720, 580];
+  for (let m = 0; m < 3; m++) {
+    seeds.push(
+      seed('depository', 'checking', monthDay(today, m + 1, 22), ccPayments[m] ?? 500, 'Credit Card Payment', 'TRANSFER_OUT', 'TRANSFER_OUT_CREDIT_CARD_PAYMENT', 'Internal Transfer'),
+    );
+  }
+
+  // ----- Savings -----
+  for (let m = 0; m < 3; m++) {
+    seeds.push(
+      seed('depository', 'savings', monthDay(today, m + 1, 8), -1_000.0, 'Transfer from Checking', 'TRANSFER_IN', 'TRANSFER_IN_DEPOSIT', 'Internal Transfer'),
+    );
+    seeds.push(
+      seed('depository', 'savings', monthDay(today, m + 1, 28), -roundTo(60 + m * 2, 2), 'Interest Earned', 'INCOME', 'INCOME_INTEREST_EARNED', null),
+    );
+  }
+
+  // ----- Credit card -----
+  const grocers = ["Trader Joe's", 'Whole Foods', 'Safeway'];
+  for (let i = 0; i < 24; i++) {
+    const day = 4 + i * 3 + ((i * 7) % 3);
+    const name = grocers[i % grocers.length]!;
+    seeds.push(
+      seed('credit', 'credit card', daysAgo(today, day), roundTo(38 + ((i * 13) % 70), 2), name, 'FOOD_AND_DRINK', 'FOOD_AND_DRINK_GROCERIES', name),
+    );
+  }
+  const eats: Array<[string, number]> = [
+    ['Blue Bottle Coffee', 6.5],
+    ['Sweetgreen', 14.25],
+    ['Chipotle', 13.75],
+    ['Tartine Bakery', 9.25],
+    ['Mission Burrito', 11.5],
+    ['Verve Coffee', 5.75],
+    ['Souvla', 17.5],
+    ['Philz Coffee', 5.5],
+    ['Tacos El Patron', 12.0],
+  ];
+  for (let i = 0; i < 36; i++) {
+    const [name, base] = eats[i % eats.length]!;
+    seeds.push(
+      seed('credit', 'credit card', daysAgo(today, 2 + i * 2 + ((i * 3) % 4)), roundTo(base + ((i * 1.3) % 11), 2), name, 'FOOD_AND_DRINK', i % 2 === 0 ? 'FOOD_AND_DRINK_COFFEE' : 'FOOD_AND_DRINK_RESTAURANT', name),
+    );
+  }
+  for (let i = 0; i < 12; i++) {
+    seeds.push(
+      seed('credit', 'credit card', daysAgo(today, 6 + i * 7), roundTo(42 + ((i * 5) % 20), 2), 'Shell Gas Station', 'TRANSPORTATION', 'TRANSPORTATION_GAS', 'Shell'),
+    );
+  }
+  const amazons = [27.99, 14.5, 89.0, 42.18, 18.95, 65.0, 124.5, 31.25, 9.99, 56.4];
+  for (let i = 0; i < amazons.length; i++) {
+    seeds.push(
+      seed('credit', 'credit card', daysAgo(today, 5 + i * 8), amazons[i]!, 'Amazon', 'GENERAL_MERCHANDISE', 'GENERAL_MERCHANDISE_ONLINE_MARKETPLACES', 'Amazon'),
+    );
+  }
+  seeds.push(
+    seed('credit', 'credit card', daysAgo(today, 22), 145.0, 'Outside Lands Festival', 'ENTERTAINMENT', 'ENTERTAINMENT_MUSIC_AND_AUDIO', 'Eventbrite'),
+  );
+  seeds.push(
+    seed('credit', 'credit card', daysAgo(today, 51), 384.92, 'United Airlines — SFO to PDX', 'TRAVEL', 'TRAVEL_FLIGHTS', 'United Airlines'),
+  );
+  for (let m = 0; m < 3; m++) {
+    seeds.push(
+      seed('credit', 'credit card', monthDay(today, m + 1, 22), -(ccPayments[m] ?? 500), 'Payment Received — Thank You', 'TRANSFER_IN', 'TRANSFER_IN_CREDIT_CARD_PAYMENT', null),
+    );
+  }
+
+  return seeds.map((s, i) => ({
+    ...s,
+    plaidTransactionId: `persona:${s.accountType}:${s.accountSubtype}:${i}`.replace(/\s+/g, '_'),
+  }));
 }

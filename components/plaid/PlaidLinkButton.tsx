@@ -77,6 +77,13 @@ export function PlaidLinkButton({ onSuccess, children, style, disabled, sandboxP
         setError(data.error ?? 'Failed to connect accounts.');
         return;
       }
+
+      // After exchange completes, override transactions with the persona's
+      // deterministic spending pattern (Plaid's sync is flaky for custom users).
+      if (sandboxPersonaSwap) {
+        await fetch('/api/plaid/sandbox-finalize-persona', { method: 'POST' }).catch(() => {});
+      }
+
       onSuccess(data.accounts ?? []);
     },
     [onSuccess, sandboxPersonaSwap],
