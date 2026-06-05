@@ -20,9 +20,14 @@ type Props = {
   children: React.ReactNode;
   style?: React.CSSProperties;
   disabled?: boolean;
+  // When true, after the user completes the real Plaid Link flow we discard
+  // Plaid's public_token and substitute one generated from our recent-grad
+  // persona via /api/plaid/sandbox-seed. The Plaid Link UI still opens (for
+  // demo credibility), but the resulting data is the persona.
+  sandboxPersonaSwap?: boolean;
 };
 
-export function PlaidLinkButton({ onSuccess, children, style, disabled }: Props) {
+export function PlaidLinkButton({ onSuccess, children, style, disabled, sandboxPersonaSwap }: Props) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [pendingOpen, setPendingOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,18 +35,38 @@ export function PlaidLinkButton({ onSuccess, children, style, disabled }: Props)
 
   const handleSuccess = useCallback(
     async (
-      publicToken: string,
+      linkPublicToken: string,
       metadata: { institution?: { institution_id?: string; name?: string } | null },
     ) => {
       setError(null);
+
+      let publicToken = linkPublicToken;
+      let institutionId = metadata.institution?.institution_id;
+      let institutionName = metadata.institution?.name;
+
+      // Swap the Plaid Link result for our persona in sandbox-demo mode.
+      if (sandboxPersonaSwap) {
+        const seedRes = await fetch('/api/plaid/sandbox-seed', { method: 'POST' });
+        const seedData = (await seedRes.json().catch(() => ({}))) as {
+          ok?: boolean;
+          publicToken?: string;
+          institutionId?: string;
+          institutionName?: string;
+          error?: string;
+        };
+        if (!seedRes.ok || !seedData.ok || !seedData.publicToken) {
+          setError(seedData.error ?? 'Failed to load demo persona.');
+          return;
+        }
+        publicToken = seedData.publicToken;
+        institutionId = seedData.institutionId ?? institutionId;
+        institutionName = seedData.institutionName ?? institutionName;
+      }
+
       const res = await fetch('/api/plaid/exchange', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          publicToken,
-          institutionId: metadata.institution?.institution_id,
-          institutionName: metadata.institution?.name,
-        }),
+        body: JSON.stringify({ publicToken, institutionId, institutionName }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
@@ -54,7 +79,7 @@ export function PlaidLinkButton({ onSuccess, children, style, disabled }: Props)
       }
       onSuccess(data.accounts ?? []);
     },
-    [onSuccess],
+    [onSuccess, sandboxPersonaSwap],
   );
 
   const { open, ready } = usePlaidLink({

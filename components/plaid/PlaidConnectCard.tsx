@@ -9,11 +9,12 @@ type Props = {
   badge?: ReactNode; // e.g., "3 accounts pulled" pill
   onSuccess: (accounts: ConnectedAccount[]) => void;
   children?: ReactNode; // optional list rendered below the header inside the card
+  sandboxPersonaSwap?: boolean;
 };
 
 // The "Connect with Plaid" gradient card. Used by ConnectBankStep + InvestmentsStep.
 // Children render under the header (separated by a divider) when present.
-export function PlaidConnectCard({ title, subline, badge, onSuccess, children }: Props) {
+export function PlaidConnectCard({ title, subline, badge, onSuccess, children, sandboxPersonaSwap }: Props) {
   return (
     <div
       style={{
@@ -25,6 +26,7 @@ export function PlaidConnectCard({ title, subline, badge, onSuccess, children }:
     >
       <PlaidLinkButton
         onSuccess={onSuccess}
+        sandboxPersonaSwap={sandboxPersonaSwap}
         style={{
           width: '100%',
           background: 'transparent',
