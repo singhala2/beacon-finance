@@ -5,10 +5,12 @@ import { log } from '@/lib/logger';
 
 const MAX_PER_INVOCATION = 100;
 
-// Daily cron entrypoint. Generates fresh insights for every user with at
-// least one connected financial account. Auth via shared CRON_SECRET so
-// random internet traffic can't burn through Anthropic credits.
-export async function POST(req: Request) {
+// Daily cron entrypoint. Generates fresh insights for every user with at least
+// one connected financial account. Auth via shared CRON_SECRET so random
+// internet traffic can't burn through Anthropic credits.
+//
+// Vercel Cron sends GET; the POST handler is kept for manual ad-hoc triggers.
+async function handle(req: Request): Promise<Response> {
   const expected = process.env.CRON_SECRET;
   if (!expected) {
     return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
@@ -42,3 +44,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ok: true, processed: users.length, succeeded, failed });
 }
+
+export const GET = handle;
+export const POST = handle;
