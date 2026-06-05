@@ -211,7 +211,18 @@ export default async function DashboardHome({ searchParams }: Props) {
     accountInstitution: t.account.institution,
   }));
 
-  const creditAccounts = accounts.filter((a) => a.type === 'credit');
+  const debtAccounts = accounts.filter((a) => a.type === 'credit' || a.type === 'loan');
+
+  // Last-30-day spend per credit-card account (positive amount = outflow).
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 86_400_000);
+  const spendLast30ById: Record<string, number> = {};
+  for (const t of historyTxs) {
+    if (t.date < thirtyDaysAgo || t.amount <= 0) continue;
+    // historyTxs covers all accounts in window; only count credit ones.
+    const acct = accounts.find((a) => a.id === t.accountId);
+    if (!acct || acct.type !== 'credit') continue;
+    spendLast30ById[acct.id] = (spendLast30ById[acct.id] ?? 0) + t.amount;
+  }
   const insightLine = buildInsightLine(netWorth, accounts.length, totalHoldings);
   const monthLabel = now.toLocaleDateString('en-US', { month: 'long' });
 
@@ -253,7 +264,7 @@ export default async function DashboardHome({ searchParams }: Props) {
     goals: <GoalsCard goals={goals} />,
     investments: <InvestmentsCard holdings={holdings} />,
     allocation: <AllocationCard allocation={allocation} />,
-    debt: <DebtCard creditAccounts={creditAccounts} />,
+    debt: <DebtCard debtAccounts={debtAccounts} spendLast30ById={spendLast30ById} />,
   };
 
   return (

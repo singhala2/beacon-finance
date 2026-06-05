@@ -8,7 +8,7 @@ export type Composition = {
   total: number;
   debt: number;
   liquid: { total: number; cashSavings: number; rothIra: number; brokerage: number; other: number };
-  illiquid: { total: number; retirement: number; other: number };
+  illiquid: { total: number; retirement: number; alternatives: number };
 };
 
 export type HistoryPoint = { date: string; value: number };
@@ -36,7 +36,7 @@ export function computeComposition(
   let brokerage = 0;
   let liquidOther = 0;
   let retirement = 0;
-  let illiquidOther = 0;
+  let alternatives = 0;
   let debt = 0;
 
   for (const a of accounts) {
@@ -51,21 +51,21 @@ export function computeComposition(
       else if (sub === 'ira' || sub === 'roth ira') rothIra += value;
       else if (sub === '401k' || sub === '403b' || sub === '457b') retirement += value;
       else if (isLiquidInvestment(a.subtype)) liquidOther += value;
-      else illiquidOther += value;
+      else alternatives += value;
     } else if (a.type === 'credit' || a.type === 'loan') {
       debt += Math.abs(bal);
     }
   }
 
   const liquidTotal = cashSavings + rothIra + brokerage + liquidOther;
-  const illiquidTotal = retirement + illiquidOther;
+  const illiquidTotal = retirement + alternatives;
   const total = liquidTotal + illiquidTotal - debt;
 
   return {
     total,
     debt,
     liquid: { total: liquidTotal, cashSavings, rothIra, brokerage, other: liquidOther },
-    illiquid: { total: illiquidTotal, retirement, other: illiquidOther },
+    illiquid: { total: illiquidTotal, retirement, alternatives },
   };
 }
 

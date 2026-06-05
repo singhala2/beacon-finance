@@ -23,6 +23,8 @@ export async function POST(req: Request) {
   try {
     // PlaidItem cascade-deletes FinancialAccount → Transaction + Holding.
     await db.plaidItem.deleteMany({ where: { userId } });
+    // Manual accounts (plaidItemId = null) don't cascade with PlaidItem; wipe explicitly.
+    await db.financialAccount.deleteMany({ where: { userId, plaidItemId: null } });
     // Conversations cascade to Messages; Insights stand alone. Wipe both so
     // there's no stale AI context from the prior data.
     await db.conversation.deleteMany({ where: { userId } });

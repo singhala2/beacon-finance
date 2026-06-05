@@ -322,9 +322,15 @@ function BreakdownView({ composition }: { composition: Composition }) {
     { label: 'Roth IRA', value: liquid.rothIra, color: '#5DA4FF' },
     { label: 'Brokerage', value: liquid.brokerage, color: '#4DC8D0' },
     { label: '401(k) / retirement', value: illiquid.retirement, color: '#FF8587' },
+    { label: 'Alternatives', value: illiquid.alternatives, color: '#C089F2' },
   ].filter((s) => s.value > 0);
 
   const grossTotal = segments.reduce((s, x) => s + x.value, 0);
+
+  const illiquidChildren = [
+    { label: '401(k)', value: illiquid.retirement, color: '#FF8587' },
+    { label: 'Alternatives', value: illiquid.alternatives, color: '#C089F2' },
+  ].filter((c) => c.value > 0);
 
   return (
     <div style={{ display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -346,9 +352,7 @@ function BreakdownView({ composition }: { composition: Composition }) {
           label="ILLIQUID"
           value={illiquid.total}
           total={grossTotal}
-          children={[
-            { label: '401(k)', value: illiquid.retirement, color: '#FF8587' },
-          ].filter((c) => c.value > 0)}
+          children={illiquidChildren}
         />
       </div>
     </div>

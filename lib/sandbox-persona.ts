@@ -92,7 +92,7 @@ export function buildRecentGradPersonaJSON(): PlaidUserCustom {
         subtype: 'checking',
         starting_balance: 4_217.43,
         currency: 'USD',
-        metadata: { name: 'Premier Checking', official_name: 'Premier Checking Account', number: '1234' },
+        metadata: { name: 'Total Checking', official_name: 'Chase Total Checking', number: '1234' },
         identity: {
           names: ['Alex Chen'],
           emails: [{ primary: true, type: 'primary', data: 'alex.chen@example.com' }],
@@ -105,16 +105,16 @@ export function buildRecentGradPersonaJSON(): PlaidUserCustom {
         subtype: 'savings',
         starting_balance: 18_240.12,
         currency: 'USD',
-        metadata: { name: 'High-Yield Savings', official_name: 'HYSA — Goal: Down Payment', number: '5678' },
+        metadata: { name: 'Marcus Online Savings', official_name: 'Marcus by Goldman Sachs Savings', number: '5678' },
         transactions: hysaTransactions(today),
       },
       // ---------- Credit card ----------
       {
         type: 'credit',
         subtype: 'credit card',
-        starting_balance: 0,
+        starting_balance: 1_847.25, // mid-cycle charges since last payment
         currency: 'USD',
-        metadata: { name: 'Signature Cash Rewards', limit: 8_000, number: '9012' },
+        metadata: { name: 'Gold Card', official_name: 'American Express Gold Card', limit: 8_000, number: '9012' },
         liability: {
           type: 'credit',
           purchase_apr: 18.99,
@@ -128,7 +128,7 @@ export function buildRecentGradPersonaJSON(): PlaidUserCustom {
         subtype: '401k',
         starting_balance: 24_980.55,
         currency: 'USD',
-        metadata: { name: 'Workplace 401(k)', number: '0001' },
+        metadata: { name: 'Fidelity 401(k)', official_name: 'Fidelity Workplace 401(k)', number: '0001' },
         holdings: [
           {
             institution_price: 41.2,
@@ -154,7 +154,7 @@ export function buildRecentGradPersonaJSON(): PlaidUserCustom {
         subtype: 'ira',
         starting_balance: 8_512.34,
         currency: 'USD',
-        metadata: { name: 'Roth IRA', number: '0002' },
+        metadata: { name: 'Schwab Roth IRA', official_name: 'Charles Schwab Roth IRA', number: '0002' },
         holdings: [
           {
             institution_price: 281.6,
@@ -180,7 +180,7 @@ export function buildRecentGradPersonaJSON(): PlaidUserCustom {
         subtype: 'brokerage',
         starting_balance: 5_211.88,
         currency: 'USD',
-        metadata: { name: 'Brokerage', number: '0003' },
+        metadata: { name: 'Fidelity Brokerage', official_name: 'Fidelity Investments Brokerage', number: '0003' },
         holdings: [
           {
             institution_price: 281.6,
@@ -214,7 +214,7 @@ export function buildRecentGradPersonaJSON(): PlaidUserCustom {
         subtype: 'student',
         starting_balance: 12_080,
         currency: 'USD',
-        metadata: { name: 'Federal Direct Loan', number: '4567' },
+        metadata: { name: 'Federal Direct Loan', official_name: 'MOHELA Federal Direct Unsubsidized', number: '4567' },
         liability: {
           type: 'student',
           origination_date: '2023-08-01',

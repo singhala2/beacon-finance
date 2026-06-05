@@ -4,6 +4,27 @@ import { db } from '@/lib/db';
 import { log } from '@/lib/logger';
 import { buildPersonaTransactionSeeds } from '@/lib/sandbox-persona';
 
+// Per-account brand overrides applied after exchange so each account looks
+// like it lives at a real institution (not the single sandbox bank).
+const BRAND_OVERRIDES: Record<string, { institution: string; name: string }> = {
+  'depository:checking':   { institution: 'Chase',                     name: 'Total Checking' },
+  'depository:savings':    { institution: 'Marcus by Goldman Sachs',   name: 'Online Savings' },
+  'credit:credit card':    { institution: 'American Express',          name: 'Gold Card' },
+  'investment:401k':       { institution: 'Fidelity',                  name: 'Workplace 401(k)' },
+  'investment:ira':        { institution: 'Charles Schwab',            name: 'Roth IRA' },
+  'investment:brokerage':  { institution: 'Fidelity',                  name: 'Brokerage' },
+  'loan:student':          { institution: 'MOHELA',                    name: 'Federal Direct Loan' },
+};
+
+const MANUAL_PRIVATE_EQUITY = {
+  institution: 'Manual',
+  name: 'Tree.AI',
+  type: 'investment',
+  subtype: 'private equity',
+  balanceCurrent: 10_000,
+  currency: 'USD',
+};
+
 // SANDBOX ONLY. Called by the client immediately after /api/plaid/exchange in
 // the persona-swap flow. Plaid's transactionsSync is unreliable for custom
 // users (sometimes ignores the transactions we send in the user_custom
@@ -66,6 +87,35 @@ export async function POST() {
     if (rows.length > 0) {
       await db.transaction.createMany({ data: rows, skipDuplicates: true });
     }
+
+    // Re-brand each account so display looks like multi-institution.
+    await Promise.all(
+      item.accounts.map((a) => {
+        const brand = BRAND_OVERRIDES[`${a.type}:${a.subtype}`];
+        if (!brand) return Promise.resolve();
+        return db.financialAccount.update({
+          where: { id: a.id },
+          data: { institution: brand.institution, name: brand.name },
+        });
+      }),
+    );
+
+    // Replace any prior manual accounts and create the Tree.AI angel-investment
+    // account (no PlaidItem — survives Plaid disconnects).
+    await db.financialAccount.deleteMany({ where: { userId, plaidItemId: null } });
+    await db.financialAccount.create({
+      data: {
+        userId,
+        plaidItemId: null,
+        plaidAccountId: null,
+        institution: MANUAL_PRIVATE_EQUITY.institution,
+        name: MANUAL_PRIVATE_EQUITY.name,
+        type: MANUAL_PRIVATE_EQUITY.type,
+        subtype: MANUAL_PRIVATE_EQUITY.subtype,
+        balanceCurrent: MANUAL_PRIVATE_EQUITY.balanceCurrent,
+        currency: MANUAL_PRIVATE_EQUITY.currency,
+      },
+    });
 
     return NextResponse.json({ ok: true, inserted: rows.length });
   } catch (err) {
