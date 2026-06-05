@@ -1,350 +1,298 @@
-// Synthetic "recent grad, further-along" persona used by /api/plaid/sandbox-seed
-// to populate a believable financial picture without going through Plaid Link.
-// PlaidItems created from this persona carry an access token of the form
-// `DEMO_PERSONA:<key>` so the sync path can skip them — see lib/transactions.ts.
+// "Recent grad, further-along" persona expressed as a Plaid Sandbox
+// user_custom v2 payload. The JSON returned by `buildRecentGradPersonaJSON()`
+// is passed as `options.override_password` to /sandbox/public_token/create so
+// the data flows through Plaid's real APIs (no DB bypass).
+//
+// Spec: https://plaid.com/docs/sandbox/user-custom/
 
-const TODAY = () => new Date(); // computed at request time so dates feel fresh
-const DAY = 86_400_000;
-const DEMO_TOKEN_PREFIX = 'DEMO_PERSONA';
-
-export function makeDemoToken(personaKey: string): string {
-  return `${DEMO_TOKEN_PREFIX}:${personaKey}:${Date.now()}`;
-}
-
-export function isDemoToken(decrypted: string): boolean {
-  return decrypted.startsWith(`${DEMO_TOKEN_PREFIX}:`);
-}
-
-export type PersonaAccount = {
-  plaidAccountId: string;
-  institution: string;
-  name: string;
-  mask: string;
-  type: string; // depository | credit | investment | loan
-  subtype: string;
-  balanceCurrent: number; // For loans/credit, store NEGATIVE to represent debt.
-  balanceLimit?: number | null;
-  currency: string;
+type PlaidTransaction = {
+  date_transacted: string;
+  date_posted: string;
+  amount: number;
+  description: string;
+  currency: 'USD';
 };
 
-export type PersonaTransaction = {
-  plaidTransactionId: string;
-  accountKey: string; // ties to PersonaAccount.plaidAccountId
-  date: Date;
-  amount: number; // positive = outflow (Plaid convention)
-  name: string;
-  merchantName?: string | null;
-  category?: string | null;
-  subcategory?: string | null;
-};
-
-export type PersonaHolding = {
-  accountKey: string;
-  symbol: string;
-  name: string;
+type PlaidHolding = {
+  institution_price: number;
+  institution_price_as_of: string;
+  cost_basis: number;
   quantity: number;
-  costBasis?: number | null;
-  currentPrice: number;
-  currentValue: number;
-  type: string; // equity | etf | mutual_fund | crypto | bond | cash | other
+  currency: 'USD';
+  security: { ticker_symbol: string; currency: 'USD' };
 };
 
-export type PersonaDataset = {
-  institutionName: string;
-  accounts: PersonaAccount[];
-  transactions: PersonaTransaction[];
-  holdings: PersonaHolding[];
+type PlaidAccountOverride = {
+  type: 'depository' | 'credit' | 'investment' | 'loan';
+  subtype: string;
+  starting_balance?: number;
+  currency?: 'USD';
+  metadata?: { name?: string; official_name?: string; limit?: number | null; number?: string };
+  transactions?: PlaidTransaction[];
+  holdings?: PlaidHolding[];
+  liability?: Record<string, unknown>;
+  identity?: { names: string[]; emails: Array<{ primary: boolean; type: string; data: string }> };
 };
 
-const RECENT_GRAD_KEY = 'recent-grad-v1';
+export type PlaidUserCustom = {
+  version: 2;
+  seed: string;
+  override_accounts: PlaidAccountOverride[];
+};
 
-export function buildRecentGradPersona(): PersonaDataset {
+const SEED = 'beacon-recent-grad-v2';
+const DAY_MS = 86_400_000;
+const TODAY = () => new Date();
+
+function isoDate(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function daysAgo(today: Date, n: number): Date {
+  return new Date(today.getTime() - n * DAY_MS);
+}
+
+function monthDay(today: Date, monthsBack: number, day: number): Date {
+  return new Date(today.getUTCFullYear(), today.getUTCMonth() - monthsBack + 1, day);
+}
+
+function roundTo(n: number, places: number): number {
+  const f = Math.pow(10, places);
+  return Math.round(n * f) / f;
+}
+
+export function buildRecentGradPersonaJSON(): PlaidUserCustom {
   const today = TODAY();
-  const accounts: PersonaAccount[] = [
-    {
-      plaidAccountId: `${RECENT_GRAD_KEY}:checking`,
-      institution: 'Beacon Sandbox Bank',
-      name: 'Premier Checking',
-      mask: '1234',
-      type: 'depository',
-      subtype: 'checking',
-      balanceCurrent: 4_217.43,
-      currency: 'USD',
-    },
-    {
-      plaidAccountId: `${RECENT_GRAD_KEY}:savings`,
-      institution: 'Beacon Sandbox Bank',
-      name: 'High-Yield Savings',
-      mask: '5678',
-      type: 'depository',
-      subtype: 'savings',
-      balanceCurrent: 18_240.12,
-      currency: 'USD',
-    },
-    {
-      plaidAccountId: `${RECENT_GRAD_KEY}:cc`,
-      institution: 'Beacon Sandbox Bank',
-      name: 'Signature Cash Rewards',
-      mask: '9012',
-      type: 'credit',
-      subtype: 'credit card',
-      balanceCurrent: 0, // paid in full
-      balanceLimit: 8_000,
-      currency: 'USD',
-    },
-    {
-      plaidAccountId: `${RECENT_GRAD_KEY}:401k`,
-      institution: 'Beacon Sandbox Bank',
-      name: 'Workplace 401(k)',
-      mask: '0001',
-      type: 'investment',
-      subtype: '401k',
-      balanceCurrent: 24_980.55,
-      currency: 'USD',
-    },
-    {
-      plaidAccountId: `${RECENT_GRAD_KEY}:roth`,
-      institution: 'Beacon Sandbox Bank',
-      name: 'Roth IRA',
-      mask: '0002',
-      type: 'investment',
-      subtype: 'ira',
-      balanceCurrent: 8_512.34,
-      currency: 'USD',
-    },
-    {
-      plaidAccountId: `${RECENT_GRAD_KEY}:brokerage`,
-      institution: 'Beacon Sandbox Bank',
-      name: 'Brokerage',
-      mask: '0003',
-      type: 'investment',
-      subtype: 'brokerage',
-      balanceCurrent: 5_211.88,
-      currency: 'USD',
-    },
-    {
-      plaidAccountId: `${RECENT_GRAD_KEY}:fed-loan`,
-      institution: 'Beacon Sandbox Bank',
-      name: 'Federal Direct Loan',
-      mask: '4567',
-      type: 'loan',
-      subtype: 'student',
-      balanceCurrent: -12_080.0, // negative = outstanding debt
-      currency: 'USD',
-    },
-  ];
-
-  const holdings: PersonaHolding[] = [
-    // 401(k)
-    {
-      accountKey: `${RECENT_GRAD_KEY}:401k`,
-      symbol: 'VFIFX',
-      name: 'Vanguard Target Retirement 2065',
-      quantity: 420.5,
-      costBasis: 17_500,
-      currentPrice: 41.2,
-      currentValue: 17_324.6,
-      type: 'mutual_fund',
-    },
-    {
-      accountKey: `${RECENT_GRAD_KEY}:401k`,
-      symbol: 'SWPPX',
-      name: 'Schwab S&P 500 Index',
-      quantity: 110.0,
-      costBasis: 6_800,
-      currentPrice: 69.6,
-      currentValue: 7_655.95,
-      type: 'mutual_fund',
-    },
-    // Roth IRA
-    {
-      accountKey: `${RECENT_GRAD_KEY}:roth`,
-      symbol: 'VTI',
-      name: 'Vanguard Total Stock Market ETF',
-      quantity: 22.5,
-      costBasis: 5_400,
-      currentPrice: 281.6,
-      currentValue: 6_336.0,
-      type: 'etf',
-    },
-    {
-      accountKey: `${RECENT_GRAD_KEY}:roth`,
-      symbol: 'VXUS',
-      name: 'Vanguard Total International Stock ETF',
-      quantity: 31.0,
-      costBasis: 1_950,
-      currentPrice: 70.2,
-      currentValue: 2_176.34,
-      type: 'etf',
-    },
-    // Brokerage
-    {
-      accountKey: `${RECENT_GRAD_KEY}:brokerage`,
-      symbol: 'VTI',
-      name: 'Vanguard Total Stock Market ETF',
-      quantity: 12.0,
-      costBasis: 2_900,
-      currentPrice: 281.6,
-      currentValue: 3_379.2,
-      type: 'etf',
-    },
-    {
-      accountKey: `${RECENT_GRAD_KEY}:brokerage`,
-      symbol: 'MSFT',
-      name: 'Microsoft Corporation',
-      quantity: 3.5,
-      costBasis: 1_300,
-      currentPrice: 442.0,
-      currentValue: 1_547.0,
-      type: 'equity',
-    },
-    {
-      accountKey: `${RECENT_GRAD_KEY}:brokerage`,
-      symbol: 'AAPL',
-      name: 'Apple Inc.',
-      quantity: 1.5,
-      costBasis: 290,
-      currentPrice: 190.45,
-      currentValue: 285.68,
-      type: 'equity',
-    },
-  ];
-
-  const transactions: PersonaTransaction[] = generateTransactions(today);
+  const priceAsOf = isoDate(today);
 
   return {
-    institutionName: 'Beacon Sandbox Bank',
-    accounts,
-    transactions,
-    holdings,
+    version: 2,
+    seed: SEED,
+    override_accounts: [
+      // ---------- Depository: Checking ----------
+      {
+        type: 'depository',
+        subtype: 'checking',
+        starting_balance: 4_217.43,
+        currency: 'USD',
+        metadata: { name: 'Premier Checking', official_name: 'Premier Checking Account', number: '1234' },
+        identity: {
+          names: ['Alex Chen'],
+          emails: [{ primary: true, type: 'primary', data: 'alex.chen@example.com' }],
+        },
+        transactions: checkingTransactions(today),
+      },
+      // ---------- Depository: HYSA ----------
+      {
+        type: 'depository',
+        subtype: 'savings',
+        starting_balance: 18_240.12,
+        currency: 'USD',
+        metadata: { name: 'High-Yield Savings', official_name: 'HYSA — Goal: Down Payment', number: '5678' },
+        transactions: hysaTransactions(today),
+      },
+      // ---------- Credit card ----------
+      {
+        type: 'credit',
+        subtype: 'credit card',
+        starting_balance: 0,
+        currency: 'USD',
+        metadata: { name: 'Signature Cash Rewards', limit: 8_000, number: '9012' },
+        liability: {
+          type: 'credit',
+          purchase_apr: 18.99,
+          minimum_payment_amount: 25,
+        },
+        transactions: creditCardTransactions(today),
+      },
+      // ---------- Investment: 401(k) ----------
+      {
+        type: 'investment',
+        subtype: '401k',
+        starting_balance: 24_980.55,
+        currency: 'USD',
+        metadata: { name: 'Workplace 401(k)', number: '0001' },
+        holdings: [
+          {
+            institution_price: 41.2,
+            institution_price_as_of: priceAsOf,
+            cost_basis: 17_500,
+            quantity: 420.5,
+            currency: 'USD',
+            security: { ticker_symbol: 'VFIFX', currency: 'USD' },
+          },
+          {
+            institution_price: 69.6,
+            institution_price_as_of: priceAsOf,
+            cost_basis: 6_800,
+            quantity: 110.0,
+            currency: 'USD',
+            security: { ticker_symbol: 'SWPPX', currency: 'USD' },
+          },
+        ],
+      },
+      // ---------- Investment: Roth IRA ----------
+      {
+        type: 'investment',
+        subtype: 'ira',
+        starting_balance: 8_512.34,
+        currency: 'USD',
+        metadata: { name: 'Roth IRA', number: '0002' },
+        holdings: [
+          {
+            institution_price: 281.6,
+            institution_price_as_of: priceAsOf,
+            cost_basis: 5_400,
+            quantity: 22.5,
+            currency: 'USD',
+            security: { ticker_symbol: 'VTI', currency: 'USD' },
+          },
+          {
+            institution_price: 70.2,
+            institution_price_as_of: priceAsOf,
+            cost_basis: 1_950,
+            quantity: 31.0,
+            currency: 'USD',
+            security: { ticker_symbol: 'VXUS', currency: 'USD' },
+          },
+        ],
+      },
+      // ---------- Investment: Brokerage ----------
+      {
+        type: 'investment',
+        subtype: 'brokerage',
+        starting_balance: 5_211.88,
+        currency: 'USD',
+        metadata: { name: 'Brokerage', number: '0003' },
+        holdings: [
+          {
+            institution_price: 281.6,
+            institution_price_as_of: priceAsOf,
+            cost_basis: 2_900,
+            quantity: 12.0,
+            currency: 'USD',
+            security: { ticker_symbol: 'VTI', currency: 'USD' },
+          },
+          {
+            institution_price: 442.0,
+            institution_price_as_of: priceAsOf,
+            cost_basis: 1_300,
+            quantity: 3.5,
+            currency: 'USD',
+            security: { ticker_symbol: 'MSFT', currency: 'USD' },
+          },
+          {
+            institution_price: 190.45,
+            institution_price_as_of: priceAsOf,
+            cost_basis: 290,
+            quantity: 1.5,
+            currency: 'USD',
+            security: { ticker_symbol: 'AAPL', currency: 'USD' },
+          },
+        ],
+      },
+      // ---------- Loan: Federal Student ----------
+      {
+        type: 'loan',
+        subtype: 'student',
+        starting_balance: 12_080,
+        currency: 'USD',
+        metadata: { name: 'Federal Direct Loan', number: '4567' },
+        liability: {
+          type: 'student',
+          origination_date: '2023-08-01',
+          principal: 28_000,
+          nominal_apr: 5.5,
+          loan_name: 'Federal Direct Unsubsidized',
+          repayment_model: {
+            type: 'standard',
+            non_repayment_months: 6,
+            repayment_months: 120,
+          },
+        },
+      },
+    ],
   };
 }
 
-// ---------- transaction generator ----------
+// ---------- transaction generators ----------
 
-function daysAgo(today: Date, n: number): Date {
-  return new Date(today.getTime() - n * DAY);
+function tx(date: Date, amount: number, description: string): PlaidTransaction {
+  const d = isoDate(date);
+  return { date_transacted: d, date_posted: d, amount, description, currency: 'USD' };
 }
 
-function txId(idx: number): string {
-  return `${RECENT_GRAD_KEY}:tx:${idx}`;
-}
+function checkingTransactions(today: Date): PlaidTransaction[] {
+  const out: PlaidTransaction[] = [];
 
-function generateTransactions(today: Date): PersonaTransaction[] {
-  const out: PersonaTransaction[] = [];
-  let idx = 0;
-  const checking = `${RECENT_GRAD_KEY}:checking`;
-  const savings = `${RECENT_GRAD_KEY}:savings`;
-  const cc = `${RECENT_GRAD_KEY}:cc`;
-
-  // Biweekly direct deposits ($3,650 net) — last 6 paydays, Fridays-ish.
+  // Biweekly direct deposits ($3,650 net) over 90 days
   for (let i = 0; i < 6; i++) {
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: checking,
-      date: daysAgo(today, 7 + i * 14),
-      amount: -3_650.0, // negative = inflow (deposit)
-      name: 'ACME Corp Payroll',
-      merchantName: 'ACME Corp',
-      category: 'INCOME',
-      subcategory: 'INCOME_WAGES',
-    });
+    out.push(tx(daysAgo(today, 7 + i * 14), -3_650.0, 'ACME Corp Payroll'));
   }
 
-  // Monthly rent on the 1st — last 3 months.
+  // Monthly rent
   for (let m = 0; m < 3; m++) {
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: checking,
-      date: monthDay(today, m + 1, 1),
-      amount: 1_750.0,
-      name: 'Rent — Maple Street Apts',
-      merchantName: 'Maple Street Apartments',
-      category: 'RENT_AND_UTILITIES',
-      subcategory: 'RENT_AND_UTILITIES_RENT',
-    });
+    out.push(tx(monthDay(today, m + 1, 1), 1_750.0, 'Maple Street Apartments — Rent'));
   }
 
-  // Federal student loan payment, 5th of month.
+  // Federal student loan payment
   for (let m = 0; m < 3; m++) {
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: checking,
-      date: monthDay(today, m + 1, 5),
-      amount: 260.0,
-      name: 'Federal Loan Servicing',
-      merchantName: 'MOHELA',
-      category: 'LOAN_PAYMENTS',
-      subcategory: 'LOAN_PAYMENTS_STUDENT_LOAN_PAYMENT',
-    });
+    out.push(tx(monthDay(today, m + 1, 5), 260.0, 'MOHELA Federal Loan Servicing'));
   }
 
-  // Monthly HYSA contribution (transfer out of checking, in to savings).
+  // Monthly HYSA transfer out
   for (let m = 0; m < 3; m++) {
-    const d = monthDay(today, m + 1, 8);
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: checking,
-      date: d,
-      amount: 1_000.0,
-      name: 'Transfer to HYSA',
-      merchantName: 'Internal Transfer',
-      category: 'TRANSFER_OUT',
-      subcategory: 'TRANSFER_OUT_SAVINGS',
-    });
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: savings,
-      date: d,
-      amount: -1_000.0,
-      name: 'Transfer from Checking',
-      merchantName: 'Internal Transfer',
-      category: 'TRANSFER_IN',
-      subcategory: 'TRANSFER_IN_DEPOSIT',
-    });
+    out.push(tx(monthDay(today, m + 1, 8), 1_000.0, 'Transfer to High-Yield Savings'));
   }
 
-  // Subscriptions — monthly.
-  const subs: Array<[number, string, string, number]> = [
-    [7, 'Netflix', 'NETFLIX', 15.49],
-    [12, 'Spotify Family', 'SPOTIFY', 16.99],
-    [20, 'NYT All Access', 'THE NEW YORK TIMES', 5.0],
-    [18, 'PG&E Electric', 'PG&E', 64.32],
-    [25, 'Internet — Sonic', 'SONIC.NET', 75.0],
-    [1, 'CrossFit Membership', 'CROSSFIT NORTH', 165.0],
+  // Subscriptions / utilities — monthly
+  const subs: Array<[number, string, number]> = [
+    [7, 'Netflix', 15.49],
+    [12, 'Spotify Family', 16.99],
+    [20, 'NYT All Access', 5.0],
+    [18, 'PG&E Electric', 64.32],
+    [25, 'Sonic.net Internet', 75.0],
+    [1, 'CrossFit Membership', 165.0],
   ];
   for (let m = 0; m < 3; m++) {
-    for (const [day, name, merchant, amt] of subs) {
-      out.push({
-        plaidTransactionId: txId(idx++),
-        accountKey: checking,
-        date: monthDay(today, m + 1, day),
-        amount: amt,
-        name,
-        merchantName: merchant,
-        category: name === 'PG&E Electric' || name === 'Internet — Sonic' ? 'RENT_AND_UTILITIES' : 'ENTERTAINMENT',
-        subcategory: null,
-      });
+    for (const [day, desc, amt] of subs) {
+      out.push(tx(monthDay(today, m + 1, day), amt, desc));
     }
   }
 
-  // Groceries — 2-3 / week (~24 over 90 days).
-  const grocers = ['Trader Joe\'s', 'Whole Foods', 'Safeway'];
-  for (let i = 0; i < 24; i++) {
-    const dayBack = 4 + i * 3 + ((i * 7) % 3);
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: cc,
-      date: daysAgo(today, dayBack),
-      amount: roundTo(38 + ((i * 13) % 70), 2),
-      name: grocers[i % grocers.length] ?? 'Grocery',
-      merchantName: grocers[i % grocers.length] ?? null,
-      category: 'FOOD_AND_DRINK',
-      subcategory: 'FOOD_AND_DRINK_GROCERIES',
-    });
+  // Monthly CC payoff (outflow from checking)
+  const payments = [400, 720, 580];
+  for (let m = 0; m < 3; m++) {
+    out.push(tx(monthDay(today, m + 1, 22), payments[m] ?? 500, 'Credit Card Payment'));
   }
 
-  // Restaurants / coffee — ~36 entries.
+  return out;
+}
+
+function hysaTransactions(today: Date): PlaidTransaction[] {
+  const out: PlaidTransaction[] = [];
+  // Inbound transfers from checking
+  for (let m = 0; m < 3; m++) {
+    out.push(tx(monthDay(today, m + 1, 8), -1_000.0, 'Transfer from Checking'));
+  }
+  // Monthly interest credit
+  for (let m = 0; m < 3; m++) {
+    out.push(tx(monthDay(today, m + 1, 28), -roundTo(60 + m * 2, 2), 'Interest Earned'));
+  }
+  return out;
+}
+
+function creditCardTransactions(today: Date): PlaidTransaction[] {
+  const out: PlaidTransaction[] = [];
+
+  // Groceries (24)
+  const grocers = ["Trader Joe's", 'Whole Foods', 'Safeway'];
+  for (let i = 0; i < 24; i++) {
+    const day = 4 + i * 3 + ((i * 7) % 3);
+    out.push(tx(daysAgo(today, day), roundTo(38 + ((i * 13) % 70), 2), grocers[i % grocers.length]!));
+  }
+
+  // Coffee/restaurants (36)
   const eats: Array<[string, number]> = [
     ['Blue Bottle Coffee', 6.5],
     ['Sweetgreen', 14.25],
@@ -358,92 +306,29 @@ function generateTransactions(today: Date): PersonaTransaction[] {
   ];
   for (let i = 0; i < 36; i++) {
     const [name, base] = eats[i % eats.length]!;
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: cc,
-      date: daysAgo(today, 2 + i * 2 + ((i * 3) % 4)),
-      amount: roundTo(base + ((i * 1.3) % 11), 2),
-      name,
-      merchantName: name,
-      category: 'FOOD_AND_DRINK',
-      subcategory: i % 2 === 0 ? 'FOOD_AND_DRINK_COFFEE' : 'FOOD_AND_DRINK_RESTAURANT',
-    });
+    out.push(tx(daysAgo(today, 2 + i * 2 + ((i * 3) % 4)), roundTo(base + ((i * 1.3) % 11), 2), name));
   }
 
-  // Gas — weekly.
+  // Gas (weekly, 12)
   for (let i = 0; i < 12; i++) {
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: cc,
-      date: daysAgo(today, 6 + i * 7),
-      amount: roundTo(42 + ((i * 5) % 20), 2),
-      name: 'Shell Gas Station',
-      merchantName: 'Shell',
-      category: 'TRANSPORTATION',
-      subcategory: 'TRANSPORTATION_GAS',
-    });
+    out.push(tx(daysAgo(today, 6 + i * 7), roundTo(42 + ((i * 5) % 20), 2), 'Shell Gas Station'));
   }
 
-  // Amazon scattered.
-  const amazonAmounts = [27.99, 14.5, 89.0, 42.18, 18.95, 65.0, 124.5, 31.25, 9.99, 56.4];
-  for (let i = 0; i < amazonAmounts.length; i++) {
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: cc,
-      date: daysAgo(today, 5 + i * 8),
-      amount: amazonAmounts[i]!,
-      name: 'Amazon',
-      merchantName: 'Amazon',
-      category: 'GENERAL_MERCHANDISE',
-      subcategory: 'GENERAL_MERCHANDISE_ONLINE_MARKETPLACES',
-    });
+  // Amazon scattered (10)
+  const amazons = [27.99, 14.5, 89.0, 42.18, 18.95, 65.0, 124.5, 31.25, 9.99, 56.4];
+  for (let i = 0; i < amazons.length; i++) {
+    out.push(tx(daysAgo(today, 5 + i * 8), amazons[i]!, 'Amazon'));
   }
 
-  // A few notable one-offs.
-  out.push({
-    plaidTransactionId: txId(idx++),
-    accountKey: cc,
-    date: daysAgo(today, 22),
-    amount: 145.0,
-    name: 'Outside Lands — Day Pass',
-    merchantName: 'Eventbrite',
-    category: 'ENTERTAINMENT',
-    subcategory: 'ENTERTAINMENT_TV_AND_MOVIES',
-  });
-  out.push({
-    plaidTransactionId: txId(idx++),
-    accountKey: cc,
-    date: daysAgo(today, 51),
-    amount: 384.92,
-    name: 'United Airlines — SFO→PDX',
-    merchantName: 'United Airlines',
-    category: 'TRAVEL',
-    subcategory: 'TRAVEL_FLIGHTS',
-  });
+  // One-offs
+  out.push(tx(daysAgo(today, 22), 145.0, 'Outside Lands Festival — Eventbrite'));
+  out.push(tx(daysAgo(today, 51), 384.92, 'United Airlines — SFO to PDX'));
 
-  // Credit card payoff each month (full balance).
+  // Monthly payments received (inflows clearing balance)
+  const payments = [400, 720, 580];
   for (let m = 0; m < 3; m++) {
-    out.push({
-      plaidTransactionId: txId(idx++),
-      accountKey: cc,
-      date: monthDay(today, m + 1, 22),
-      amount: -([400, 720, 580][m] ?? 500),
-      name: 'Payment from Checking',
-      merchantName: 'Internal Transfer',
-      category: 'TRANSFER_IN',
-      subcategory: 'TRANSFER_IN_CREDIT_CARD_PAYMENT',
-    });
+    out.push(tx(monthDay(today, m + 1, 22), -(payments[m] ?? 500), 'Payment Received — Thank You'));
   }
 
   return out;
-}
-
-function monthDay(today: Date, monthsBack: number, day: number): Date {
-  const d = new Date(today.getUTCFullYear(), today.getUTCMonth() - monthsBack + 1, day);
-  return d;
-}
-
-function roundTo(n: number, places: number): number {
-  const f = Math.pow(10, places);
-  return Math.round(n * f) / f;
 }

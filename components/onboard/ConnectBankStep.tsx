@@ -82,21 +82,41 @@ export function ConnectBankStep({ initial, sandboxMode = false }: Props) {
     setSeedError(null);
     setSeeding(true);
     try {
-      const res = await fetch('/api/plaid/sandbox-seed', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ wipeExisting: true }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
+      // Step 1: ask Plaid Sandbox to create a public token whose data matches
+      // the recent-grad persona. The endpoint also wipes existing items first.
+      const seedRes = await fetch('/api/plaid/sandbox-seed', { method: 'POST' });
+      const seedData = (await seedRes.json().catch(() => ({}))) as {
         ok?: boolean;
-        accounts?: ConnectedAccount[];
+        publicToken?: string;
+        institutionName?: string;
+        institutionId?: string;
         error?: string;
       };
-      if (!res.ok || !data.ok) {
-        setSeedError(data.error ?? 'Could not seed demo persona.');
+      if (!seedRes.ok || !seedData.ok || !seedData.publicToken) {
+        setSeedError(seedData.error ?? 'Could not generate demo persona.');
         return;
       }
-      // Hard reload so server-rendered onboarding state reflects new accounts.
+
+      // Step 2: exchange via the same endpoint Plaid Link uses, so persistence,
+      // holdings fetch, and transaction sync all run end-to-end.
+      const exchangeRes = await fetch('/api/plaid/exchange', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          publicToken: seedData.publicToken,
+          institutionId: seedData.institutionId,
+          institutionName: seedData.institutionName,
+        }),
+      });
+      const exchangeData = (await exchangeRes.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (!exchangeRes.ok || !exchangeData.ok) {
+        setSeedError(exchangeData.error ?? 'Plaid exchange failed.');
+        return;
+      }
+
       window.location.reload();
     } finally {
       setSeeding(false);
