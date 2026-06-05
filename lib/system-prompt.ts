@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { formatCurrency } from './format';
+import { formatCurrency, labelForCategory } from './format';
 
 const RISK_LABELS: Record<number, string> = {
   1: 'Conservative',
@@ -16,6 +16,9 @@ export type UserContext = {
   accountLines: string;
   holdingLines: string;
   goalLines: string;
+  spendingLines: string;
+  incomeLines: string;
+  recentTransactionLines: string;
   // Raw aggregates other callers (insight generator) may want without re-querying:
   netWorth: number;
   cashOnHand: number;
@@ -23,10 +26,17 @@ export type UserContext = {
   debtTotal: number;
 };
 
+const EXCLUDED_SPEND_CATEGORIES = new Set(['TRANSFER_IN', 'TRANSFER_OUT', 'INCOME', 'LOAN_PAYMENTS']);
+const INCOME_CATEGORY = 'INCOME';
+
 // Pulls the user's live financial state and renders it as a reusable block
 // of text. Used by both the chat system prompt and the insights generator.
 export async function buildUserContextSnippet(userId: string): Promise<UserContext> {
-  const [user, accounts, holdings, goals] = await Promise.all([
+  const now = new Date();
+  const last30Start = new Date(now.getTime() - 30 * 86_400_000);
+  const last60Start = new Date(now.getTime() - 60 * 86_400_000);
+
+  const [user, accounts, holdings, goals, recentTxs] = await Promise.all([
     db.user.findUnique({
       where: { id: userId },
       select: {
@@ -40,6 +50,7 @@ export async function buildUserContextSnippet(userId: string): Promise<UserConte
     db.financialAccount.findMany({
       where: { userId, isHidden: false },
       select: {
+        id: true,
         institution: true,
         name: true,
         type: true,
@@ -56,6 +67,18 @@ export async function buildUserContextSnippet(userId: string): Promise<UserConte
       where: { userId, deletedAt: null },
       select: { name: true, type: true, targetAmount: true, targetDate: true },
       orderBy: { createdAt: 'asc' },
+    }),
+    db.transaction.findMany({
+      where: { userId, date: { gte: last60Start }, pending: false },
+      select: {
+        date: true,
+        amount: true,
+        name: true,
+        merchantName: true,
+        category: true,
+        accountId: true,
+      },
+      orderBy: { date: 'desc' },
     }),
   ]);
 
@@ -98,6 +121,86 @@ export async function buildUserContextSnippet(userId: string): Promise<UserConte
 
   const riskLabel = user.riskTolerance ? RISK_LABELS[user.riskTolerance] ?? 'Unknown' : 'Not set';
 
+  // ---- Spending / income aggregates (last 30 days vs 30 prior) ----
+  const accountById = new Map(accounts.map((a) => [a.id, a]));
+  let total30Spend = 0;
+  let total30Income = 0;
+  let totalPriorSpend = 0;
+  const spendByCategory = new Map<string, number>();
+  const spendByMerchant = new Map<string, { total: number; count: number }>();
+  const spendByAccount = new Map<string, number>();
+  const incomeByMerchant = new Map<string, number>();
+
+  for (const t of recentTxs) {
+    const inLast30 = t.date >= last30Start;
+    const cat = (t.category ?? '').toUpperCase();
+    if (cat === INCOME_CATEGORY) {
+      if (inLast30) {
+        total30Income += -t.amount; // inflow → negative amount
+        const key = t.merchantName ?? t.name;
+        incomeByMerchant.set(key, (incomeByMerchant.get(key) ?? 0) + -t.amount);
+      }
+      continue;
+    }
+    if (EXCLUDED_SPEND_CATEGORIES.has(cat)) continue;
+    if (t.amount <= 0) continue; // only outflows
+    if (inLast30) {
+      total30Spend += t.amount;
+      spendByCategory.set(cat || 'OTHER', (spendByCategory.get(cat || 'OTHER') ?? 0) + t.amount);
+      const merchant = t.merchantName ?? t.name;
+      const cur = spendByMerchant.get(merchant) ?? { total: 0, count: 0 };
+      spendByMerchant.set(merchant, { total: cur.total + t.amount, count: cur.count + 1 });
+      spendByAccount.set(t.accountId, (spendByAccount.get(t.accountId) ?? 0) + t.amount);
+    } else {
+      totalPriorSpend += t.amount;
+    }
+  }
+
+  const topCategories = [...spendByCategory.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  const topMerchants = [...spendByMerchant.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 8);
+  const accountSpendLines = [...spendByAccount.entries()]
+    .map(([id, total]) => {
+      const a = accountById.get(id);
+      const label = a ? `${a.institution} ${a.name}` : id;
+      return `- ${label}: ${formatCurrency(total, { maximumFractionDigits: 0 })}`;
+    });
+
+  const spendingLines = total30Spend === 0
+    ? '(no spending data yet)'
+    : [
+        `Total (last 30d): ${formatCurrency(total30Spend, { maximumFractionDigits: 0 })}` +
+          (totalPriorSpend > 0 ? ` · prior 30d: ${formatCurrency(totalPriorSpend, { maximumFractionDigits: 0 })}` : ''),
+        '',
+        'Top categories:',
+        ...topCategories.map(([cat, total]) => `- ${labelForCategory(cat)}: ${formatCurrency(total, { maximumFractionDigits: 0 })}`),
+        '',
+        'Top merchants:',
+        ...topMerchants.map(([m, { total, count }]) => `- ${m}: ${formatCurrency(total, { maximumFractionDigits: 0 })} across ${count} ${count === 1 ? 'charge' : 'charges'}`),
+        '',
+        'Spend by account:',
+        ...accountSpendLines,
+      ].join('\n');
+
+  const incomeLines = total30Income === 0
+    ? '(no income recorded in last 30 days)'
+    : [
+        `Total (last 30d): ${formatCurrency(total30Income, { maximumFractionDigits: 0 })}`,
+        ...[...incomeByMerchant.entries()].map(([m, total]) => `- ${m}: ${formatCurrency(total, { maximumFractionDigits: 0 })}`),
+      ].join('\n');
+
+  const recentTransactionLines = recentTxs.length === 0
+    ? '(no recent transactions)'
+    : recentTxs
+        .slice(0, 12)
+        .map((t) => {
+          const sign = t.amount >= 0 ? '-' : '+';
+          const amt = formatCurrency(Math.abs(t.amount), { maximumFractionDigits: 2 });
+          const date = t.date.toISOString().slice(0, 10);
+          const merchant = t.merchantName ?? t.name;
+          return `- ${date} ${sign}${amt} ${merchant}`;
+        })
+        .join('\n');
+
   const cashOnHand = accounts
     .filter((a) => a.type === 'depository')
     .reduce((s, a) => s + (a.balanceCurrent ?? 0), 0);
@@ -119,6 +222,9 @@ export async function buildUserContextSnippet(userId: string): Promise<UserConte
     accountLines,
     holdingLines,
     goalLines,
+    spendingLines,
+    incomeLines,
+    recentTransactionLines,
     netWorth,
     cashOnHand,
     investable,
@@ -148,6 +254,16 @@ ${ctx.goalLines}
 
 RISK PROFILE: ${ctx.riskLabel}
 ${contextLine}
+SPENDING (LAST 30 DAYS):
+${ctx.spendingLines}
+
+INCOME (LAST 30 DAYS):
+${ctx.incomeLines}
+
+RECENT TRANSACTIONS:
+${ctx.recentTransactionLines}
+
+
 VOICE AND STYLE:
 - Talk like a smart friend who is also a CFA. Conversational, precise, calm. Second person.
 - Be concise. No exclamation marks unless something is genuinely worth celebrating.
