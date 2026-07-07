@@ -256,7 +256,9 @@ model Document {
   type        String    // registry DocumentType key: pay_stub | offer_letter | ...
   filename    String
   mimeType    String
-  blobUrl     String?   @db.Text // encrypted storage reference; null when raw blobs are not persisted
+  blobUrl     String?   @db.Text // legacy encrypted storage reference (Phase 8); superseded by objectKey
+  objectKey   String?   @db.Text // R2 object key for the encrypted original (Phase 9); null when R2 not configured
+  sizeBytes   Int?      // original byte size, for per-user quota (Phase 9)
   sourceExcerpt String? @db.Text // redacted provenance excerpt (PII stripped) when no raw blob is kept
   status      String    @default("processing") // processing | ready | failed
   error       String?   @db.Text

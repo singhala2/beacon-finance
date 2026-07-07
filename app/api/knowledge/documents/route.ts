@@ -12,6 +12,8 @@ import { commitFacts, type FactInput } from '@/lib/knowledge/facts';
 import { getDocumentType } from '@/lib/knowledge/registry';
 import { extractFacts, classifyDocument, type FilePayload } from '@/lib/knowledge/extract';
 import { looksLikePii } from '@/lib/knowledge/redact';
+import { isObjectStorageConfigured, putObject } from '@/lib/storage/objects';
+import { hasRoom } from '@/lib/knowledge/quota';
 
 export const runtime = 'nodejs';
 
@@ -50,6 +52,9 @@ export async function POST(req: Request) {
   if (file.size === 0 || file.size > MAX_BYTES) {
     return NextResponse.json({ error: 'File must be between 1 byte and 10 MB' }, { status: 400 });
   }
+  if (!(await hasRoom(userId, file.size))) {
+    return NextResponse.json({ error: 'You have reached your document storage limit.' }, { status: 413 });
+  }
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const payload = toFilePayload(file.type, buffer);
@@ -78,11 +83,23 @@ export async function POST(req: Request) {
       type: docTypeKey,
       filename: file.name || 'upload',
       mimeType: file.type,
-      blobUrl: null,
+      sizeBytes: file.size,
       status: 'processing',
     },
   });
   await logAudit({ userId, action: 'knowledge.document.upload', targetType: 'Document', targetId: document.id, metadata: { type: docTypeKey }, req });
+
+  // Store the encrypted original when R2 is configured. Failure here does not
+  // block extraction; the document simply has no retrievable original.
+  if (isObjectStorageConfigured()) {
+    try {
+      const key = `documents/${userId}/${document.id}`;
+      await putObject(key, buffer, file.type);
+      await db.document.update({ where: { id: document.id }, data: { objectKey: key } });
+    } catch {
+      // Left as objectKey: null; surfaced via status/logs, not fatal.
+    }
+  }
 
   try {
     const { facts, excerpt } = await extractFacts(docTypeKey, payload);

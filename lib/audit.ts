@@ -15,7 +15,9 @@ export type AuditAction =
   | 'data.export'
   | 'account.delete'
   | 'knowledge.document.upload'
+  | 'knowledge.document.download'
   | 'knowledge.document.delete'
+  | 'knowledge.document.index'
   | 'knowledge.fact.commit'
   | 'knowledge.fact.confirm'
   | 'knowledge.fact.reject';

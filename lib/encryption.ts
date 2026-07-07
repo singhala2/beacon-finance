@@ -31,3 +31,25 @@ export function decrypt(encoded: string): string {
   decipher.setAuthTag(tag);
   return decipher.update(ciphertext) + decipher.final('utf8');
 }
+
+// Binary variants for document originals (Phase 9). Same AES-256-GCM scheme and
+// iv(12B) + tag(16B) + ciphertext layout, but Buffer in/out so we never round a
+// file through a lossy utf-8 string.
+export function encryptBytes(plaintext: Buffer): Buffer {
+  const key = getKey();
+  const iv = randomBytes(IV_BYTES);
+  const cipher = createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return Buffer.concat([iv, tag, encrypted]);
+}
+
+export function decryptBytes(payload: Buffer): Buffer {
+  const key = getKey();
+  const iv = payload.subarray(0, IV_BYTES);
+  const tag = payload.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
+  const ciphertext = payload.subarray(IV_BYTES + TAG_BYTES);
+  const decipher = createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+}

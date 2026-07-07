@@ -6,6 +6,7 @@ import { DOMAINS, getFactType, type FactType, type MarginalWeight } from '@/lib/
 import { getConfirmedFacts, getFactsByStatus } from '@/lib/knowledge/facts';
 import { factLabel, formatFactValue } from '@/lib/knowledge/display';
 import { getStaleFacts, detectConflicts } from '@/lib/knowledge/lifecycle';
+import { getUsage, QUOTA_BYTES } from '@/lib/knowledge/quota';
 import { AddFactChip } from '@/components/knowledge/AddFactChip';
 
 // Phase 8 (8D) — the Knowledge Hub, rendered generically from the registry.
@@ -29,12 +30,15 @@ export default async function KnowledgePage() {
   if (!session?.user?.id) return null;
   const userId = session.user.id;
 
-  const [confirmed, pending, stale, conflicts] = await Promise.all([
+  const [confirmed, pending, stale, conflicts, usage] = await Promise.all([
     getConfirmedFacts(userId),
     getFactsByStatus(userId, 'pending'),
     getStaleFacts(userId),
     detectConflicts(userId),
+    getUsage(userId),
   ]);
+  const usedMb = (usage / (1024 * 1024)).toFixed(usage > 0 && usage < 1024 * 1024 ? 2 : 1);
+  const quotaMb = Math.round(QUOTA_BYTES / (1024 * 1024));
 
   // Group confirmed facts by domain.
   const byDomain = new Map<string, typeof confirmed>();
@@ -66,6 +70,9 @@ export default async function KnowledgePage() {
 
       <div style={{ marginBottom: 16 }}>
         <UploadCard />
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
+          {usedMb} of {quotaMb} MB used
+        </div>
       </div>
 
       {pending.length > 0 && (
