@@ -19,8 +19,11 @@ function serializeContext(context?: Record<string, unknown>): Record<string, unk
 function emit(level: LogLevel, message: string, context?: Record<string, unknown>): void {
   if (isTest) return;
   if (isProd) {
+    // console.log (not process.stdout.write) so this module stays importable
+    // from Edge Runtime bundles (middleware, edge routes). Both write one line
+    // to stdout in the Node server; the Edge analyzer rejects process.stdout.
     const payload = { level, message, ...serializeContext(context), ts: new Date().toISOString() };
-    process.stdout.write(JSON.stringify(payload) + '\n');
+    console.log(JSON.stringify(payload));
     return;
   }
   const tag = level === 'error' ? '[err]' : level === 'warn' ? '[warn]' : '[info]';
