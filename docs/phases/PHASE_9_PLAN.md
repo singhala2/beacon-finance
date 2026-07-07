@@ -42,7 +42,7 @@ Each is independently shippable. Commit and push after each.
 | 9A | Encrypted original storage + quota | R2 client (`lib/storage/objects.ts`, S3 SDK). Upload encrypts bytes and stores them in R2; `Document` records the object key + `sizeBytes`. Auth+ownership `GET /documents/[id]` streams the decrypted file; `DELETE` removes the object, row, facts, and chunks and audit-logs `knowledge.document.delete`. Per-user byte quota enforced on upload; usage shown on the Hub. | ✅ done |
 | 9B | Open ingestion + classification + text extraction | Uploads accept any supported file; unknown types are allowed, not rejected. A generic step extracts full text (Claude-native for PDFs/images), stores a redacted, encrypted copy, an open-ended `docKind` label, and a freeform key-takeaways `summary`. | ✅ done |
 | 9C | Structured facts for known types | When classification maps to a registry `DocumentType`, the existing 8B extractor still runs and lands typed facts in the ledger (pending). Unknown types skip it. Both layers, one pipeline. | ✅ done (folded into 9B) |
-| 9D | Semantic index (pgvector + Voyage) | Enable `pgvector` on Neon. `DocumentChunk` model holds chunked, redacted text + embeddings. On upload, text is chunked and embedded via `lib/embeddings.ts` (Voyage). Re-index + backfill path for existing docs. | not started |
+| 9D | Semantic index (pgvector + Voyage) | Enable `pgvector` on Neon. `DocumentChunk` model holds chunked, redacted text + embeddings. On upload, text is chunked and embedded via `lib/embeddings.ts` (Voyage). Re-index + backfill path for existing docs. | ✅ done |
 | 9E | Corpus retrieval in chat (RAG) | `search_documents` tool: embed the question, k-NN over the user's chunks (cosine), return snippets + document refs; added to the existing chat tool loop. Top per-doc takeaways optionally ride inline, budgeted. Answers cite the source document. | not started |
 | 9F | Filing-cabinet UX | A documents view: browse (type/kind, date, size, status), open a document (view original via the download route), per-doc detail (summary, extracted facts if any, delete), and a corpus search box (semantic + keyword). | not started |
 
@@ -120,7 +120,14 @@ Append findings, deviations, and decisions during execution under each milestone
 - **Folded into 9B** because opening ingestion and deciding known-vs-unknown fact handling are inseparable — splitting them would have transiently removed structured extraction. In `processDocument`, when `classifyOpen` returns a `knownType`, the existing 8B `extractFacts` + `commitFacts` still run (facts land `pending`, `source: 'document'`); unknown types skip it. Both layers, one pipeline — a known doc feeds the ledger *and* the corpus; an unknown doc feeds only the corpus. A structured-extraction failure is caught and never blocks corpus ingestion.
 
 ### 9D notes
-_(empty)_
+
+- **pgvector 0.8.0 enabled on Neon** (`CREATE EXTENSION`), plus an **HNSW cosine index** (`vector_cosine_ops`) on `DocumentChunk.embedding` created via raw SQL (Prisma can't model vector indexes).
+- **Schema**: `DocumentChunk` (userId, documentId, ord, content redacted, `embedding vector(1024)` as Prisma `Unsupported`, cascade-deletes with the document). `Document.chunks` back-relation. Applied via `db:push`.
+- **Embeddings** `lib/embeddings.ts`: Voyage `voyage-3.5`, 1024-dim (matches the column), via `fetch` (no SDK). `input_type` distinguishes `document` vs `query` embeddings. Credential-gated on `VOYAGE_API_KEY` (`isEmbeddingsConfigured`).
+- **Indexer** `lib/knowledge/index-document.ts` (replaces the 9B stub): chunk the redacted text (~1000 chars, 150 overlap, cap 200), embed the batch, and insert rows via **raw SQL** (`${literal}::vector`) since Prisma can't write the Unsupported type. Idempotent — clears existing chunks first, so re-indexing is safe. No-op (returns 0) without the Voyage key, so ingestion still works. Called from `processDocument`.
+- **Backfill** `POST /api/knowledge/reindex`: decrypts each document's stored `extractedText` and re-indexes it. Run once after the Voyage key is first added so pre-existing documents become searchable. Returns 503 when embeddings aren't configured.
+- **Dimension coupling** noted in the plan: `EMBEDDING_DIMS` (1024) must equal the `vector(1024)` column. Switching to a differently-sized Voyage model is a one-line schema change + re-push + reindex.
+- Not runtime-verified (needs `VOYAGE_API_KEY`): `tsc` clean; the vector insert/query SQL is exercised on first indexed upload.
 
 ### 9E notes
 _(empty)_

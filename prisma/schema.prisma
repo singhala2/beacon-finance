@@ -268,10 +268,29 @@ model Document {
   uploadedAt  DateTime  @default(now())
   processedAt DateTime?
 
-  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  facts KnowledgeFact[]
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facts  KnowledgeFact[]
+  chunks DocumentChunk[]
 
   @@index([userId, uploadedAt])
+}
+
+// Phase 9 (9D) — a chunk of a document's redacted text plus its embedding, for
+// semantic retrieval. `embedding` is a pgvector column; inserts and k-NN queries
+// use raw SQL since Prisma models the type as Unsupported.
+model DocumentChunk {
+  id         String                       @id @default(cuid())
+  userId     String
+  documentId String
+  ord        Int
+  content    String                       @db.Text // redacted chunk text
+  embedding  Unsupported("vector(1024)")?
+  createdAt  DateTime                     @default(now())
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([documentId])
 }
 
 // Phase 8 — the fact ledger. The unit of value in the Knowledge Hub.
