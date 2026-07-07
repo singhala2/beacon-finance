@@ -70,8 +70,11 @@ export default async function KnowledgePage() {
 
       <div style={{ marginBottom: 16 }}>
         <UploadCard />
-        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', textAlign: 'right' }}>
-          {usedMb} of {quotaMb} MB used
+        <div style={{ marginTop: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)' }}>
+          <Link href="/knowledge/documents" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>
+            Browse documents →
+          </Link>
+          <span>{usedMb} of {quotaMb} MB used</span>
         </div>
       </div>
 

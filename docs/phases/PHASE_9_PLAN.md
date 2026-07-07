@@ -44,7 +44,7 @@ Each is independently shippable. Commit and push after each.
 | 9C | Structured facts for known types | When classification maps to a registry `DocumentType`, the existing 8B extractor still runs and lands typed facts in the ledger (pending). Unknown types skip it. Both layers, one pipeline. | ✅ done (folded into 9B) |
 | 9D | Semantic index (pgvector + Voyage) | Enable `pgvector` on Neon. `DocumentChunk` model holds chunked, redacted text + embeddings. On upload, text is chunked and embedded via `lib/embeddings.ts` (Voyage). Re-index + backfill path for existing docs. | ✅ done |
 | 9E | Corpus retrieval in chat (RAG) | `search_documents` tool: embed the question, k-NN over the user's chunks (cosine), return snippets + document refs; added to the existing chat tool loop. Top per-doc takeaways optionally ride inline, budgeted. Answers cite the source document. | ✅ done |
-| 9F | Filing-cabinet UX | A documents view: browse (type/kind, date, size, status), open a document (view original via the download route), per-doc detail (summary, extracted facts if any, delete), and a corpus search box (semantic + keyword). | not started |
+| 9F | Filing-cabinet UX | A documents view: browse (type/kind, date, size, status), open a document (view original via the download route), per-doc detail (summary, extracted facts if any, delete), and a corpus search box (semantic + keyword). | ✅ done |
 
 ## Database schema additions (`prisma/schema.prisma`)
 
@@ -138,4 +138,9 @@ Append findings, deviations, and decisions during execution under each milestone
 - Not runtime-verified (needs `VOYAGE_API_KEY` + indexed docs): `tsc` clean; live retrieval exercised on first query after a doc is indexed.
 
 ### 9F notes
-_(empty)_
+
+- **Page** `/knowledge/documents` (server) lists every uploaded document (filename, docKind/status, date, size, summary) and renders the client `DocumentsBrowser`. Linked from the Hub ("Browse documents →") next to the storage-usage line.
+- **`components/knowledge/DocumentsBrowser.tsx`** (client): a semantic search box (hits `POST /api/knowledge/search`, shows the best snippet per document, each opening the original), and the full document list with **Open** (streams the decrypted original via the 9A download route) and **Delete** (9A delete route, optimistic + refresh). Summaries shown inline.
+- **`POST /api/knowledge/search`**: owner-scoped semantic search, grouped to the nearest snippet per document. Returns empty + 200 when embeddings are unconfigured, so the box degrades gracefully (it is hidden when `searchEnabled` is false).
+- Search box is shown only when `VOYAGE_API_KEY` is configured; browse/open/delete work regardless.
+- Verified: `tsc` + full `pnpm build` clean. Live open/search need R2 + Voyage keys and an uploaded, indexed document.
