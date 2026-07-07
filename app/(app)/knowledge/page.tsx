@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { Card, CardHeader, CardEmptyState } from '@/components/dashboard/Card';
@@ -40,12 +41,16 @@ export default async function KnowledgePage() {
 
       {pending.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <Card>
-            <div style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-              <span style={{ color: 'var(--color-mint)' }}>{pending.length}</span>{' '}
-              fact{pending.length === 1 ? '' : 's'} waiting for you to confirm. The review queue arrives next.
-            </div>
-          </Card>
+          <Link href="/knowledge/review" style={{ textDecoration: 'none' }}>
+            <Card>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-muted)' }}>
+                <span style={{ color: 'var(--color-mint)' }}>{pending.length}</span>
+                fact{pending.length === 1 ? '' : 's'} waiting for you to confirm.
+                <span style={{ flex: 1 }} />
+                <span style={{ color: 'var(--color-text)', fontSize: 12, fontFamily: 'var(--font-mono)' }}>Review →</span>
+              </div>
+            </Card>
+          </Link>
         </div>
       )}
 

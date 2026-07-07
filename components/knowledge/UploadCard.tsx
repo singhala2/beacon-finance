@@ -5,6 +5,7 @@
 // adds the confirmation queue this links to.
 
 import { useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BBtn } from '@/components/ui';
 import { Card, CardHeader } from '@/components/dashboard/Card';
@@ -117,6 +118,14 @@ export function UploadCard() {
           fact{result.committed === 1 ? '' : 's'} to review.
           {result.rejected > 0 && (
             <span style={{ color: 'var(--color-text-dim)' }}> {result.rejected} could not be read cleanly.</span>
+          )}
+          {result.committed > 0 && (
+            <>
+              {' '}
+              <Link href="/knowledge/review" style={{ color: 'var(--color-text)', textDecoration: 'underline' }}>
+                Review now
+              </Link>
+            </>
           )}
         </div>
       )}

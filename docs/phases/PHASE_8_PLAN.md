@@ -31,7 +31,7 @@ Each is independently shippable. Commit and push after each.
 |----|-----------|------------|--------|
 | 8A | Fact ledger + domain registry (scalable core) | `KnowledgeFact` + `Document` models. `lib/knowledge/registry.ts` declares domains, fact types, and document types as metadata with per-fact `marginalWeight`. `lib/knowledge/facts.ts` is the single commit path: validates every fact against the registry, persists, supersedes prior confirmed facts on confirm, and audit-logs. No UI yet. | ✅ done |
 | 8B | Document upload + schema-driven extraction (Income slice) | Upload endpoint stores the file (encrypted blob ref), classifies against a registry document type, and runs one **generic** extractor that reads the doc type's `extractionFields` and calls Claude for typed JSON. PII redacted before persistence. Ships `pay_stub` + `offer_letter`. Facts land in the ledger as `pending`. | ✅ done |
-| 8C | Confirmation queue | Extracted/chat facts show next to their source snippet. Confirm / edit / reject each. Confirm commits + supersedes; reject marks rejected. | not started |
+| 8C | Confirmation queue | Extracted/chat facts show next to their source snippet. Confirm / edit / reject each. Confirm commits + supersedes; reject marks rejected. | ✅ done |
 | 8D | Knowledge Hub page — domain-organized | `/knowledge` renders domains generically from the registry × the user's confirmed facts. Ever-present, un-scored "Add more" affordance per domain with `marginalWeight`-driven suggestions. A new registry domain appears with zero new page code. | not started |
 | 8E | Chat integration | Per-domain summarizers render confirmed facts into compact blocks. Priority-budgeted assembly fills the system-prompt context budget by `marginalWeight`. `search_facts` / `get_document` retrieval tools for the long tail. The agent can request a document mid-conversation when it hits a gap. | not started |
 | 8F | Additional sources + lifecycle | Manual entry + conversational fact capture adapters (same commit path). Staleness re-verification invitations and Plaid-vs-fact conflict surfacing. | not started |
@@ -104,7 +104,12 @@ Append findings, deviations from plan, and decisions made during execution under
 - **Not runtime-verified here**: live extraction needs a signed-in session + a real Anthropic call. `tsc` and `pnpm build` are clean; end-to-end upload is in the testing notes for the user.
 
 ### 8C notes
-_(empty)_
+
+- **Page** `/knowledge/review` (server) builds `QueueItem`s from all `pending` facts, joined to their `Document` for provenance. Linked from the `/knowledge` pending banner and the upload success message.
+- **`components/knowledge/ConfirmationQueue.tsx`** (client): one row per fact showing domain, registry label, formatted value, the source snippet, and confidence. Confirm / Edit / Reject. Edit reveals an input prefilled with a re-parseable value; Save confirms with the patch. Rows disappear optimistically on resolve and `router.refresh()` keeps the nav/Hub counts in sync.
+- **Actions API** `app/api/knowledge/facts/[id]/route.ts` `PATCH { action: 'confirm' | 'reject', value? }` → `confirmFact` / `rejectFact`. All truth-changing logic (supersession, audit) stays in `lib/knowledge/facts.ts`; the route is a thin auth wrapper. Editing re-validates the new value against the registry inside `confirmFact`.
+- **Shared display helpers** `lib/knowledge/display.ts`: `factLabel`, `formatFactValue` (money/number/date/boolean/text), and `evidenceForKey` which pulls the per-fact evidence line out of `Document.sourceExcerpt` (stored as `key: evidence`). Reused by 8D so a fact renders identically in the queue and the Hub.
+- Confirming supersedes any prior live fact with the same key (8A behavior), so re-uploading a newer pay stub and confirming replaces the old value rather than duplicating it.
 
 ### 8D notes
 _(empty)_
