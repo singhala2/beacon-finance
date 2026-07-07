@@ -43,7 +43,7 @@ Each is independently shippable. Commit and push after each.
 | 9B | Open ingestion + classification + text extraction | Uploads accept any supported file; unknown types are allowed, not rejected. A generic step extracts full text (Claude-native for PDFs/images), stores a redacted, encrypted copy, an open-ended `docKind` label, and a freeform key-takeaways `summary`. | ✅ done |
 | 9C | Structured facts for known types | When classification maps to a registry `DocumentType`, the existing 8B extractor still runs and lands typed facts in the ledger (pending). Unknown types skip it. Both layers, one pipeline. | ✅ done (folded into 9B) |
 | 9D | Semantic index (pgvector + Voyage) | Enable `pgvector` on Neon. `DocumentChunk` model holds chunked, redacted text + embeddings. On upload, text is chunked and embedded via `lib/embeddings.ts` (Voyage). Re-index + backfill path for existing docs. | ✅ done |
-| 9E | Corpus retrieval in chat (RAG) | `search_documents` tool: embed the question, k-NN over the user's chunks (cosine), return snippets + document refs; added to the existing chat tool loop. Top per-doc takeaways optionally ride inline, budgeted. Answers cite the source document. | not started |
+| 9E | Corpus retrieval in chat (RAG) | `search_documents` tool: embed the question, k-NN over the user's chunks (cosine), return snippets + document refs; added to the existing chat tool loop. Top per-doc takeaways optionally ride inline, budgeted. Answers cite the source document. | ✅ done |
 | 9F | Filing-cabinet UX | A documents view: browse (type/kind, date, size, status), open a document (view original via the download route), per-doc detail (summary, extracted facts if any, delete), and a corpus search box (semantic + keyword). | not started |
 
 ## Database schema additions (`prisma/schema.prisma`)
@@ -130,7 +130,12 @@ Append findings, deviations, and decisions during execution under each milestone
 - Not runtime-verified (needs `VOYAGE_API_KEY`): `tsc` clean; the vector insert/query SQL is exercised on first indexed upload.
 
 ### 9E notes
-_(empty)_
+
+- **Retrieval** `lib/knowledge/retrieval.ts` `searchDocuments(userId, query, k=6)`: embeds the query (`input_type: 'query'`) and runs a cosine k-NN (`embedding <=> $query::vector`) joined to `Document`, scoped to the owner, via raw SQL. Returns snippet + filename + docKind + distance.
+- **Tool** `search_documents` added to `KNOWLEDGE_TOOLS` with a handler that formats hits as `From "<file>" (<kind>): <passage>`. **No chat-route change needed** — the 8E tool loop already iterates `KNOWLEDGE_TOOLS`, so the tool went live automatically. Gracefully returns a "not available" message when `VOYAGE_API_KEY` is absent.
+- **Awareness** `buildDocumentContext(userId)` (in `context.ts`) lists the user's uploaded documents (filename + docKind, capped at 20) in the system prompt so the agent knows what it can search; injected after the confirmed-facts block. Empty when no docs or embeddings unconfigured. The intro paragraph now names all three read tools and tells the agent to cite the document it answered from.
+- Full-content passages ride via the tool (retrieval), not the prompt; only the compact document list rides inline — matching principle 5.
+- Not runtime-verified (needs `VOYAGE_API_KEY` + indexed docs): `tsc` clean; live retrieval exercised on first query after a doc is indexed.
 
 ### 9F notes
 _(empty)_

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { formatCurrency, labelForCategory } from './format';
-import { buildKnowledgeContext } from '@/lib/knowledge/context';
+import { buildKnowledgeContext, buildDocumentContext } from '@/lib/knowledge/context';
 
 const RISK_LABELS: Record<number, string> = {
   1: 'Conservative',
@@ -239,14 +239,18 @@ export async function buildSystemPrompt(userId: string): Promise<string> {
   const contextLine = ctx.onboardingContext
     ? `\nUser-supplied context: ${ctx.onboardingContext}\n`
     : '';
-  const knownFacts = await buildKnowledgeContext(userId);
+  const [knownFacts, documentList] = await Promise.all([
+    buildKnowledgeContext(userId),
+    buildDocumentContext(userId),
+  ]);
   const knownFactsBlock = knownFacts ? `\n${knownFacts}\n` : '';
+  const documentBlock = documentList ? `\n${documentList}\n` : '';
 
   return `You are Beacon, a personal finance copilot for ${ctx.displayName}.
 
 You have read-only access to ${ctx.displayName}'s connected financial accounts. Always quote real numbers from the data below when relevant. Never fabricate balances, prices, transactions, or returns. If the user asks about something the data does not cover, say so plainly.
 
-You can also call the search_facts tool to look up details the user has confirmed about themselves (comp, loan terms, rent, benefits) that are not shown below, and get_document to see where a fact came from. Prefer the facts you are given here; reach for the tools only when you need something not present.
+You can also call tools: search_facts to look up confirmed details about the user (comp, loan terms, rent, benefits) not shown below, search_documents to semantically search the full text of everything they have uploaded (tax returns, wills, statements, and more), and get_document to see a document's provenance. Prefer the facts and summaries you are given here; reach for the tools when a question touches something not present, and cite the document when you answer from one.
 
 CONNECTED ACCOUNTS:
 ${ctx.accountLines}
@@ -258,7 +262,7 @@ GOALS:
 ${ctx.goalLines}
 
 RISK PROFILE: ${ctx.riskLabel}
-${contextLine}${knownFactsBlock}
+${contextLine}${knownFactsBlock}${documentBlock}
 SPENDING (LAST 30 DAYS):
 ${ctx.spendingLines}
 

@@ -10,6 +10,8 @@ import { db } from '@/lib/db';
 import { getConfirmedFacts, commitFacts } from '@/lib/knowledge/facts';
 import { DOMAINS, getFactType, getDomain, getDocumentType } from '@/lib/knowledge/registry';
 import { factLabel, formatFactValue } from '@/lib/knowledge/display';
+import { searchDocuments } from '@/lib/knowledge/retrieval';
+import { isEmbeddingsConfigured } from '@/lib/embeddings';
 
 const DOMAIN_KEYS = DOMAINS.map((d) => d.key);
 const ALL_FACT_KEYS = DOMAINS.flatMap((d) => d.factTypes.map((ft) => ft.key));
@@ -39,6 +41,18 @@ export const KNOWLEDGE_TOOLS: Tool[] = [
     },
   },
   {
+    name: 'search_documents',
+    description:
+      "Semantically search the full text of every document the user has uploaded (tax returns, wills, statements, offer letters, anything). Use this to answer questions about the contents of their documents, e.g. 'what does my will say about the house' or 'what was my total tax last year'. Returns the most relevant passages with the source document. Always cite the document a passage came from.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'What to look for, in natural language.' },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'capture_fact',
     description:
       'Record a durable personal-finance fact the user states in conversation (e.g. "my rent is 2400", "my 401k match is 4%"). Only use it for stable facts about the user, not one-off transactions or questions. The fact is saved as pending and the user confirms it in their review queue before Beacon relies on it, so never treat it as confirmed in your reply. Do not capture Social Security numbers or account numbers.',
@@ -55,15 +69,33 @@ export const KNOWLEDGE_TOOLS: Tool[] = [
 ];
 
 export function isKnowledgeTool(name: string): boolean {
-  return name === 'search_facts' || name === 'get_document' || name === 'capture_fact';
+  return (
+    name === 'search_facts' ||
+    name === 'get_document' ||
+    name === 'search_documents' ||
+    name === 'capture_fact'
+  );
 }
 
 export async function handleKnowledgeTool(userId: string, name: string, input: unknown): Promise<string> {
   const args = (input ?? {}) as { query?: string; domain?: string; documentId?: string; key?: string; value?: string };
   if (name === 'search_facts') return searchFacts(userId, args.query, args.domain);
   if (name === 'get_document') return getDocument(userId, args.documentId);
+  if (name === 'search_documents') return searchCorpus(userId, args.query);
   if (name === 'capture_fact') return captureFact(userId, args.domain, args.key, args.value);
   return `Unknown tool: ${name}`;
+}
+
+async function searchCorpus(userId: string, query?: string): Promise<string> {
+  if (!isEmbeddingsConfigured()) {
+    return 'Document search is not available right now. Answer from the facts and document summaries you already have.';
+  }
+  if (!query?.trim()) return 'Provide a query to search the documents.';
+  const hits = await searchDocuments(userId, query, 6);
+  if (hits.length === 0) return 'No document passages matched. The user may not have uploaded a document covering that.';
+  return hits
+    .map((h) => `From "${h.filename}"${h.docKind ? ` (${h.docKind})` : ''}:\n${h.content}`)
+    .join('\n\n---\n\n');
 }
 
 async function captureFact(userId: string, domain?: string, key?: string, value?: string): Promise<string> {

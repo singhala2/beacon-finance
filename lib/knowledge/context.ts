@@ -3,9 +3,11 @@
 // fit, the highest marginal-utility facts (the ones Plaid cannot see) win the
 // budget, and the long tail is reachable via the search_facts tool.
 
+import { db } from '@/lib/db';
 import { getConfirmedFacts } from '@/lib/knowledge/facts';
 import { DOMAINS, getDomain, getFactType, type MarginalWeight } from '@/lib/knowledge/registry';
 import { factLabel, formatFactValue } from '@/lib/knowledge/display';
+import { isEmbeddingsConfigured } from '@/lib/embeddings';
 
 const WEIGHT_RANK: Record<MarginalWeight, number> = { high: 0, medium: 1, low: 2 };
 const DEFAULT_BUDGET_CHARS = 1600;
@@ -67,10 +69,33 @@ export async function buildKnowledgeContext(
 
   const header =
     'What you know about this user, confirmed by them (treat as ground truth; it overrides generic assumptions and reflects things their linked accounts cannot show):';
+  return renderFactBlock(header, domainBlocks, omitted);
+}
+
+function renderFactBlock(header: string, domainBlocks: string[], omitted: number): string {
   const tail =
     omitted > 0
       ? `\n(${omitted} more confirmed fact${omitted === 1 ? '' : 's'} not shown here. Use the search_facts tool if you need details beyond the above.)`
       : '';
 
   return `${header}\n${domainBlocks.join('\n')}${tail}`;
+}
+
+/**
+ * A short catalogue of the documents the user has uploaded, so the agent knows
+ * what it can reach for via search_documents. Returns '' when there are no
+ * documents or when semantic search is not configured.
+ */
+export async function buildDocumentContext(userId: string, limit = 20): Promise<string> {
+  if (!isEmbeddingsConfigured()) return '';
+  const docs = await db.document.findMany({
+    where: { userId, status: 'ready' },
+    orderBy: { uploadedAt: 'desc' },
+    take: limit,
+    select: { filename: true, docKind: true },
+  });
+  if (docs.length === 0) return '';
+
+  const lines = docs.map((d) => `- ${d.filename}${d.docKind ? ` (${d.docKind})` : ''}`);
+  return `Documents this user has uploaded (use the search_documents tool to read their contents when a question touches them; cite the document you used):\n${lines.join('\n')}`;
 }
