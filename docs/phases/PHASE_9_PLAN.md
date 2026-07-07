@@ -40,8 +40,8 @@ Each is independently shippable. Commit and push after each.
 | #  | Milestone | Acceptance | Status |
 |----|-----------|------------|--------|
 | 9A | Encrypted original storage + quota | R2 client (`lib/storage/objects.ts`, S3 SDK). Upload encrypts bytes and stores them in R2; `Document` records the object key + `sizeBytes`. Auth+ownership `GET /documents/[id]` streams the decrypted file; `DELETE` removes the object, row, facts, and chunks and audit-logs `knowledge.document.delete`. Per-user byte quota enforced on upload; usage shown on the Hub. | ✅ done |
-| 9B | Open ingestion + classification + text extraction | Uploads accept any supported file; unknown types are allowed, not rejected. A generic step extracts full text (Claude-native for PDFs/images), stores a redacted, encrypted copy, an open-ended `docKind` label, and a freeform key-takeaways `summary`. | not started |
-| 9C | Structured facts for known types | When classification maps to a registry `DocumentType`, the existing 8B extractor still runs and lands typed facts in the ledger (pending). Unknown types skip it. Both layers, one pipeline. | not started |
+| 9B | Open ingestion + classification + text extraction | Uploads accept any supported file; unknown types are allowed, not rejected. A generic step extracts full text (Claude-native for PDFs/images), stores a redacted, encrypted copy, an open-ended `docKind` label, and a freeform key-takeaways `summary`. | ✅ done |
+| 9C | Structured facts for known types | When classification maps to a registry `DocumentType`, the existing 8B extractor still runs and lands typed facts in the ledger (pending). Unknown types skip it. Both layers, one pipeline. | ✅ done (folded into 9B) |
 | 9D | Semantic index (pgvector + Voyage) | Enable `pgvector` on Neon. `DocumentChunk` model holds chunked, redacted text + embeddings. On upload, text is chunked and embedded via `lib/embeddings.ts` (Voyage). Re-index + backfill path for existing docs. | not started |
 | 9E | Corpus retrieval in chat (RAG) | `search_documents` tool: embed the question, k-NN over the user's chunks (cosine), return snippets + document refs; added to the existing chat tool loop. Top per-doc takeaways optionally ride inline, budgeted. Answers cite the source document. | not started |
 | 9F | Filing-cabinet UX | A documents view: browse (type/kind, date, size, status), open a document (view original via the download route), per-doc detail (summary, extracted facts if any, delete), and a corpus search box (semantic + keyword). | not started |
@@ -106,10 +106,18 @@ Append findings, deviations, and decisions during execution under each milestone
 - Not runtime-verified (needs R2 creds): `tsc` clean; storage paths exercised on first real upload once creds are set.
 
 ### 9B notes
-_(empty)_
+
+- **Pipeline** `lib/knowledge/ingest.ts` `processDocument(userId, documentId, payload)`: extract text → open classify → summarize → (known type) structured facts → update row → index (9D hook). One path for every document.
+- **Open ingestion** (`app/api/knowledge/documents/route.ts`): no more type picker or "unknown → reject". Any file is stored (9A); PDFs/images/text are transcribed and processed; a type Claude cannot read is still stored and marked `docKind: 'file'`, just not transcribed/indexed. `toFilePayload` now also accepts `text/*`, JSON, CSV.
+- **Text extraction** `extractText`: text payloads pass through; PDFs/images are transcribed by Claude (`claude-sonnet-4-6`), capped at 60k chars. Stored **redacted and encrypted** in `Document.extractedText` (9D decrypts it to rebuild chunks without re-fetching the original).
+- **Open classification** `classifyOpen`: one tool call returns a freeform `docKind` (e.g. "will", "tax return") **and** an optional `known_type` from the registry enum. Freeform label is the corpus's organizing key; the known type drives structured extraction.
+- **Summary** `summarize` (`claude-haiku`): 2–5 redacted key-takeaway bullets stored in `Document.summary`.
+- **Redaction everywhere**: `redactPii` runs on the extracted text before it is summarized, stored, or (9D) indexed; `looksLikePii` still guards committed fact values. The encrypted original in R2 stays complete; the index/prompt surface is scrubbed (principle 4).
+- **Schema**: `Document.docKind`, `Document.summary`, `Document.extractedText` (`db:push`). `UploadCard` reworked for open upload + classification-aware success copy.
 
 ### 9C notes
-_(empty)_
+
+- **Folded into 9B** because opening ingestion and deciding known-vs-unknown fact handling are inseparable — splitting them would have transiently removed structured extraction. In `processDocument`, when `classifyOpen` returns a `knownType`, the existing 8B `extractFacts` + `commitFacts` still run (facts land `pending`, `source: 'document'`); unknown types skip it. Both layers, one pipeline — a known doc feeds the ledger *and* the corpus; an unknown doc feeds only the corpus. A structured-extraction failure is caught and never blocks corpus ingestion.
 
 ### 9D notes
 _(empty)_

@@ -1,17 +1,15 @@
-// Phase 8 (8B) — document upload + schema-driven extraction.
-// Upload a supported document, classify it against the registry, extract typed
-// facts with Claude, and land them in the ledger as `pending`. No raw binary is
-// persisted (no blob store configured): we keep only a redacted excerpt as
-// provenance.
+// Phase 9 (9B) — open document ingestion.
+// Accept any document, store the encrypted original (9A), then run the pipeline:
+// extract text, classify open-endedly, summarize, and (for known registry types)
+// extract structured facts. Unknown types are stored and summarized, never
+// rejected.
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
-import { commitFacts, type FactInput } from '@/lib/knowledge/facts';
-import { getDocumentType } from '@/lib/knowledge/registry';
-import { extractFacts, classifyDocument, type FilePayload } from '@/lib/knowledge/extract';
-import { looksLikePii } from '@/lib/knowledge/redact';
+import type { FilePayload } from '@/lib/knowledge/extract';
+import { processDocument } from '@/lib/knowledge/ingest';
 import { isObjectStorageConfigured, putObject } from '@/lib/storage/objects';
 import { hasRoom } from '@/lib/knowledge/quota';
 
@@ -20,6 +18,8 @@ export const runtime = 'nodejs';
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
 const IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
 
+// A Claude-readable payload for text extraction, or null when the type cannot be
+// read (the original is still stored; it just is not transcribed or indexed).
 function toFilePayload(mimeType: string, buffer: Buffer): FilePayload | null {
   if (mimeType === 'application/pdf') {
     return { kind: 'pdf', base64: buffer.toString('base64') };
@@ -27,7 +27,8 @@ function toFilePayload(mimeType: string, buffer: Buffer): FilePayload | null {
   if (IMAGE_TYPES.has(mimeType)) {
     return { kind: 'image', mediaType: mimeType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp', base64: buffer.toString('base64') };
   }
-  if (mimeType === 'text/plain') {
+  // Text-like types decode directly.
+  if (mimeType.startsWith('text/') || mimeType === 'application/json' || mimeType === 'text/csv') {
     return { kind: 'text', text: buffer.toString('utf-8') };
   }
   return null;
@@ -58,39 +59,22 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const payload = toFilePayload(file.type, buffer);
-  if (!payload) {
-    return NextResponse.json({ error: 'Unsupported file type. Upload a PDF, image, or text file.' }, { status: 400 });
-  }
 
-  // Determine the document type: caller-provided, else classify.
-  const requestedType = typeof form.get('type') === 'string' ? String(form.get('type')) : '';
-  let docTypeKey = requestedType && getDocumentType(requestedType) ? requestedType : '';
-  if (!docTypeKey) {
-    const classified = await classifyDocument(payload).catch(() => null);
-    if (!classified) {
-      return NextResponse.json(
-        { error: 'Could not identify the document. Please pick a document type and try again.', needsType: true },
-        { status: 422 },
-      );
-    }
-    docTypeKey = classified;
-  }
-
-  // Record the document up front so a failed extraction still leaves a trace.
+  // Record the document up front so a failed ingestion still leaves a trace.
   const document = await db.document.create({
     data: {
       userId,
-      type: docTypeKey,
+      type: '',
       filename: file.name || 'upload',
       mimeType: file.type,
       sizeBytes: file.size,
       status: 'processing',
     },
   });
-  await logAudit({ userId, action: 'knowledge.document.upload', targetType: 'Document', targetId: document.id, metadata: { type: docTypeKey }, req });
+  await logAudit({ userId, action: 'knowledge.document.upload', targetType: 'Document', targetId: document.id, req });
 
   // Store the encrypted original when R2 is configured. Failure here does not
-  // block extraction; the document simply has no retrievable original.
+  // block ingestion; the document simply has no retrievable original.
   if (isObjectStorageConfigured()) {
     try {
       const key = `documents/${userId}/${document.id}`;
@@ -101,31 +85,33 @@ export async function POST(req: Request) {
     }
   }
 
-  try {
-    const { facts, excerpt } = await extractFacts(docTypeKey, payload);
-
-    // Never commit a value that still looks like an identifier.
-    const inputs: FactInput[] = facts
-      .filter((f) => !looksLikePii(f.value))
-      .map((f) => ({ domain: f.domain, key: f.factKey, value: f.value, source: 'document', documentId: document.id, confidence: f.confidence }));
-
-    const result = await commitFacts(userId, inputs, { req });
-
+  // Types Claude cannot read are still stored, just not transcribed or indexed.
+  if (!payload) {
     await db.document.update({
       where: { id: document.id },
-      data: { status: 'ready', processedAt: new Date(), sourceExcerpt: excerpt || null },
+      data: { type: 'other', docKind: 'file', status: 'ready', processedAt: new Date() },
     });
-
     return NextResponse.json({
       ok: true,
-      document: { id: document.id, type: docTypeKey, filename: document.filename },
+      document: { id: document.id, filename: document.filename },
+      stored: Boolean(isObjectStorageConfigured()),
+      read: false,
+    });
+  }
+
+  try {
+    const result = await processDocument(userId, document.id, payload, { req });
+    return NextResponse.json({
+      ok: true,
+      document: { id: document.id, filename: document.filename, docKind: result.docKind, knownType: result.knownType },
       committed: result.committed,
-      rejected: result.rejected,
+      indexed: result.indexed,
+      read: true,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Extraction failed';
+    const message = err instanceof Error ? err.message : 'Ingestion failed';
     await db.document.update({ where: { id: document.id }, data: { status: 'failed', error: message } });
-    return NextResponse.json({ error: 'We could not read that document. Please try another file.' }, { status: 502 });
+    return NextResponse.json({ error: 'We stored the file but could not read it. You can still keep it here.' }, { status: 502 });
   }
 }
 

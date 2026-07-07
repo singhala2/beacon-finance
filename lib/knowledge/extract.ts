@@ -68,7 +68,7 @@ function buildExtractionTool(docType: DocumentType): Tool {
   };
 }
 
-function fileToContentBlock(file: FilePayload) {
+export function fileToContentBlock(file: FilePayload) {
   if (file.kind === 'pdf') {
     return { type: 'document' as const, source: { type: 'base64' as const, media_type: 'application/pdf' as const, data: file.base64 } };
   }

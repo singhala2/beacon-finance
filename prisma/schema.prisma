@@ -259,6 +259,9 @@ model Document {
   blobUrl     String?   @db.Text // legacy encrypted storage reference (Phase 8); superseded by objectKey
   objectKey   String?   @db.Text // R2 object key for the encrypted original (Phase 9); null when R2 not configured
   sizeBytes   Int?      // original byte size, for per-user quota (Phase 9)
+  docKind     String?   // open-ended classification label, e.g. "will", "tax return" (Phase 9)
+  summary     String?   @db.Text // redacted freeform key-takeaways summary (Phase 9)
+  extractedText String? @db.Text // redacted full text, encrypted, for re-indexing (Phase 9)
   sourceExcerpt String? @db.Text // redacted provenance excerpt (PII stripped) when no raw blob is kept
   status      String    @default("processing") // processing | ready | failed
   error       String?   @db.Text

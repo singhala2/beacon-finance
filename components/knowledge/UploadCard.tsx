@@ -1,24 +1,21 @@
 'use client';
 
-// Phase 8 (8B) — minimal upload affordance. Ships the working pipeline so
-// extraction is testable. 8D replaces this with the domain-organized Hub; 8C
-// adds the confirmation queue this links to.
+// Phase 9 (9B) — open upload. Accept any document; Beacon stores it, works out
+// what it is, summarizes it, and (for known types) pulls structured facts.
 
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { BBtn } from '@/components/ui';
 import { Card, CardHeader } from '@/components/dashboard/Card';
-import { DOCUMENT_TYPES } from '@/lib/knowledge/registry';
 
 type Result =
-  | { kind: 'ok'; committed: number; rejected: number; filename: string }
+  | { kind: 'ok'; filename: string; docKind?: string; committed: number; read: boolean }
   | { kind: 'error'; message: string };
 
 export function UploadCard() {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [type, setType] = useState('auto');
   const [fileName, setFileName] = useState('');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
@@ -31,13 +28,18 @@ export function UploadCard() {
     try {
       const form = new FormData();
       form.append('file', file);
-      if (type !== 'auto') form.append('type', type);
       const res = await fetch('/api/knowledge/documents', { method: 'POST', body: form });
       const data = await res.json();
       if (!res.ok) {
         setResult({ kind: 'error', message: data.error ?? 'Upload failed.' });
       } else {
-        setResult({ kind: 'ok', committed: data.committed ?? 0, rejected: (data.rejected ?? []).length, filename: data.document?.filename ?? file.name });
+        setResult({
+          kind: 'ok',
+          filename: data.document?.filename ?? file.name,
+          docKind: data.document?.docKind,
+          committed: data.committed ?? 0,
+          read: data.read ?? false,
+        });
         if (inputRef.current) inputRef.current.value = '';
         setFileName('');
         router.refresh();
@@ -53,31 +55,11 @@ export function UploadCard() {
     <Card>
       <CardHeader eyebrow="Add a document" />
       <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: '0 0 14px' }}>
-        Upload a pay stub or offer letter. Beacon reads it, pulls out the numbers, and asks you to confirm
-        each one. We keep a short excerpt for context, not the original file.
+        Upload anything: a pay stub, a tax return, a loan statement, a will. Beacon stores it securely,
+        figures out what it is, and can pull on it when you ask questions in chat.
       </p>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value)}
-          style={{
-            height: 44,
-            padding: '0 12px',
-            background: 'var(--color-bg-4)',
-            color: 'var(--color-text)',
-            border: '1px solid var(--color-line-2)',
-            borderRadius: 'var(--radius-md)',
-            fontSize: 14,
-            fontFamily: 'var(--font-sans)',
-          }}
-        >
-          <option value="auto">Detect automatically</option>
-          {DOCUMENT_TYPES.map((d) => (
-            <option key={d.key} value={d.key}>{d.label}</option>
-          ))}
-        </select>
-
         <label
           style={{
             height: 44,
@@ -90,7 +72,7 @@ export function UploadCard() {
             borderRadius: 'var(--radius-md)',
             fontSize: 14,
             cursor: 'pointer',
-            maxWidth: 260,
+            maxWidth: 320,
             overflow: 'hidden',
             whiteSpace: 'nowrap',
             textOverflow: 'ellipsis',
@@ -100,7 +82,6 @@ export function UploadCard() {
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf,image/png,image/jpeg,image/gif,image/webp,text/plain"
             onChange={(e) => setFileName(e.target.files?.[0]?.name ?? '')}
             style={{ display: 'none' }}
           />
@@ -113,19 +94,20 @@ export function UploadCard() {
 
       {result?.kind === 'ok' && (
         <div style={{ marginTop: 14, fontSize: 13, color: 'var(--color-text-muted)' }}>
-          Read <span style={{ color: 'var(--color-text)' }}>{result.filename}</span> and found{' '}
-          <span style={{ color: 'var(--color-mint)' }}>{result.committed}</span>{' '}
-          fact{result.committed === 1 ? '' : 's'} to review.
-          {result.rejected > 0 && (
-            <span style={{ color: 'var(--color-text-dim)' }}> {result.rejected} could not be read cleanly.</span>
-          )}
-          {result.committed > 0 && (
+          Stored <span style={{ color: 'var(--color-text)' }}>{result.filename}</span>
+          {result.docKind ? <> as a <span style={{ color: 'var(--color-text)' }}>{result.docKind}</span></> : null}.
+          {result.read && result.committed > 0 ? (
             <>
-              {' '}
+              {' '}Found <span style={{ color: 'var(--color-mint)' }}>{result.committed}</span>{' '}
+              fact{result.committed === 1 ? '' : 's'} to review.{' '}
               <Link href="/knowledge/review" style={{ color: 'var(--color-text)', textDecoration: 'underline' }}>
                 Review now
               </Link>
             </>
+          ) : result.read ? (
+            <> Beacon can now use it in chat.</>
+          ) : (
+            <> Saved to your cabinet.</>
           )}
         </div>
       )}
