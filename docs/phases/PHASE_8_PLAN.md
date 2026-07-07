@@ -30,7 +30,7 @@ Each is independently shippable. Commit and push after each.
 | #  | Milestone | Acceptance | Status |
 |----|-----------|------------|--------|
 | 8A | Fact ledger + domain registry (scalable core) | `KnowledgeFact` + `Document` models. `lib/knowledge/registry.ts` declares domains, fact types, and document types as metadata with per-fact `marginalWeight`. `lib/knowledge/facts.ts` is the single commit path: validates every fact against the registry, persists, supersedes prior confirmed facts on confirm, and audit-logs. No UI yet. | ✅ done |
-| 8B | Document upload + schema-driven extraction (Income slice) | Upload endpoint stores the file (encrypted blob ref), classifies against a registry document type, and runs one **generic** extractor that reads the doc type's `extractionFields` and calls Claude for typed JSON. PII redacted before persistence. Ships `pay_stub` + `offer_letter`. Facts land in the ledger as `pending`. | not started |
+| 8B | Document upload + schema-driven extraction (Income slice) | Upload endpoint stores the file (encrypted blob ref), classifies against a registry document type, and runs one **generic** extractor that reads the doc type's `extractionFields` and calls Claude for typed JSON. PII redacted before persistence. Ships `pay_stub` + `offer_letter`. Facts land in the ledger as `pending`. | ✅ done |
 | 8C | Confirmation queue | Extracted/chat facts show next to their source snippet. Confirm / edit / reject each. Confirm commits + supersedes; reject marks rejected. | not started |
 | 8D | Knowledge Hub page — domain-organized | `/knowledge` renders domains generically from the registry × the user's confirmed facts. Ever-present, un-scored "Add more" affordance per domain with `marginalWeight`-driven suggestions. A new registry domain appears with zero new page code. | not started |
 | 8E | Chat integration | Per-domain summarizers render confirmed facts into compact blocks. Priority-budgeted assembly fills the system-prompt context budget by `marginalWeight`. `search_facts` / `get_document` retrieval tools for the long tail. The agent can request a document mid-conversation when it hits a gap. | not started |
@@ -92,7 +92,16 @@ Append findings, deviations from plan, and decisions made during execution under
 - `AuditAction` extended with five `knowledge.*` actions; every fact mutation is audit-logged (Phase 7B).
 
 ### 8B notes
-_(empty)_
+
+- **No blob store (no `BLOB_READ_WRITE_TOKEN`), so raw binaries are not persisted.** `Document.blobUrl` is now nullable and left null; a new `Document.sourceExcerpt String? @db.Text` holds a redacted, per-fact evidence excerpt as provenance. This is the pinned autorun default and satisfies "runs without new credentials."
+- **Generic extractor** `lib/knowledge/extract.ts`: `extractFacts(docTypeKey, file)` builds an Anthropic tool from the doc type's `extractionFields` (enum of allowed `factKey`s), forces `tool_choice`, and parses the typed JSON — mirrors `lib/insights-ai.ts`. Adding a doc type is a registry declaration; this file never changes. Model: `claude-sonnet-4-6` (matches insights; higher-stakes persisted output). `classifyDocument(file)` picks a registry doc type when the uploader chooses "Detect automatically".
+- **PDFs/images go to Claude natively** (`document` / `image` content blocks, base64). Text files are `redactPii`-scrubbed before they reach Anthropic.
+- **PII** `lib/knowledge/redact.ts`: `redactPii()` strips SSNs and full account/routing/card numbers (labelled + bare) from any excerpt before persistence; `looksLikePii()` is a final guard so no fact value that still looks like an identifier is ever committed. Dollar amounts, dates, employer names are preserved.
+- **Commit path unchanged**: extracted values flow through `commitFacts` as `source: 'document'`, landing `pending`. One bad field is dropped by registry validation without discarding the rest (8A behavior).
+- **Endpoint** `app/api/knowledge/documents/route.ts` (`POST` upload, `GET` list). Records the `Document` up front (`processing`) so a failed extraction still leaves a trace, then `ready`/`failed`. Audit-logs `knowledge.document.upload`. 10 MB cap; accepts PDF, PNG/JPG/GIF/WebP, and text.
+- **Minimal UI to make the pipeline testable**: `/knowledge` page + `components/knowledge/UploadCard.tsx` (upload + doc-type picker + recent-documents list + pending-count hint). Added a `Knowledge` sidebar nav entry (new `KnowledgeIcon`, `DASHBOARD_NAV`, topbar title). **8D replaces this page with the domain-organized Hub; 8C adds the confirmation queue it points to.** This minimal surface is intentional throwaway scaffolding, kept small.
+- **Incidental build fix (separate commit): `lib/logger.ts`** used `process.stdout.write`, which the Edge Runtime analyzer rejects; it is reachable from `middleware.ts` via `ratelimit.ts`, so `pnpm build` was already failing on the 8A parent commit (unrelated to Phase 8). Swapped to `console.log(JSON.stringify(...))` — same one-line stdout output in the Node server, Edge-safe. Build is green after this.
+- **Not runtime-verified here**: live extraction needs a signed-in session + a real Anthropic call. `tsc` and `pnpm build` are clean; end-to-end upload is in the testing notes for the user.
 
 ### 8C notes
 _(empty)_

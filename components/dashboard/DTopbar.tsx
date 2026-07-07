@@ -10,6 +10,7 @@ const PAGE_TITLE: Record<string, string> = {
   goals: 'Goals',
   investments: 'Investments',
   plan: 'Plan',
+  knowledge: 'Knowledge',
 };
 
 type Props = {

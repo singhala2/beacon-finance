@@ -10,6 +10,7 @@ import {
   TargetIcon,
   SparkleIcon,
   CheckBoxIcon,
+  KnowledgeIcon,
 } from '@/components/ui';
 import {
   DASHBOARD_NAV,
@@ -25,6 +26,7 @@ const NAV_ICONS: Record<DashboardNavId, React.ComponentType<{ size?: number; col
   goals: TargetIcon,
   investments: SparkleIcon,
   plan: CheckBoxIcon,
+  knowledge: KnowledgeIcon,
 };
 
 type Props = {

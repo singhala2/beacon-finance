@@ -83,6 +83,13 @@ export const PlusIcon = make((c) => (
   <path d="M8 3v10M3 8h10" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
 ));
 
+export const KnowledgeIcon = make((c) => (
+  <>
+    <path d="M4 2h5l3 3v9H4z" stroke={c} strokeWidth="1.4" strokeLinejoin="round" />
+    <path d="M9 2v3h3M6 8.5h4M6 11h4" stroke={c} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+  </>
+));
+
 export const TrendIcon = make((c) => (
   <path
     d="M2 11l4-4 3 2 5-5M14 4h-3.5M14 4v3.5"

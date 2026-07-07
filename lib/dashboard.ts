@@ -23,7 +23,7 @@ export function formatSyncedAgo(at: Date | null): string {
   return d === 1 ? '1 day ago' : `${d} days ago`;
 }
 
-export type DashboardNavId = 'home' | 'spending' | 'goals' | 'investments' | 'plan';
+export type DashboardNavId = 'home' | 'spending' | 'goals' | 'investments' | 'plan' | 'knowledge';
 
 export const DASHBOARD_NAV: { id: DashboardNavId; label: string; href: string }[] = [
   { id: 'home',        label: 'Home',        href: '/' },
@@ -31,6 +31,7 @@ export const DASHBOARD_NAV: { id: DashboardNavId; label: string; href: string }[
   { id: 'goals',       label: 'Goals',       href: '/goals' },
   { id: 'investments', label: 'Investments', href: '/investments' },
   { id: 'plan',        label: 'Plan',        href: '/plan' },
+  { id: 'knowledge',   label: 'Knowledge',   href: '/knowledge' },
 ];
 
 export function activeNavForPath(pathname: string): DashboardNavId {
@@ -38,5 +39,6 @@ export function activeNavForPath(pathname: string): DashboardNavId {
   if (pathname.startsWith('/goals')) return 'goals';
   if (pathname.startsWith('/investments')) return 'investments';
   if (pathname.startsWith('/plan')) return 'plan';
+  if (pathname.startsWith('/knowledge')) return 'knowledge';
   return 'home';
 }

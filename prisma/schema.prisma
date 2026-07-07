@@ -256,7 +256,8 @@ model Document {
   type        String    // registry DocumentType key: pay_stub | offer_letter | ...
   filename    String
   mimeType    String
-  blobUrl     String    @db.Text // encrypted storage reference
+  blobUrl     String?   @db.Text // encrypted storage reference; null when raw blobs are not persisted
+  sourceExcerpt String? @db.Text // redacted provenance excerpt (PII stripped) when no raw blob is kept
   status      String    @default("processing") // processing | ready | failed
   error       String?   @db.Text
   uploadedAt  DateTime  @default(now())
