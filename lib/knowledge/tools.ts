@@ -7,9 +7,12 @@
 
 import type { Tool } from '@anthropic-ai/sdk/resources/messages';
 import { db } from '@/lib/db';
-import { getConfirmedFacts } from '@/lib/knowledge/facts';
-import { getFactType, getDomain, getDocumentType } from '@/lib/knowledge/registry';
+import { getConfirmedFacts, commitFacts } from '@/lib/knowledge/facts';
+import { DOMAINS, getFactType, getDomain, getDocumentType } from '@/lib/knowledge/registry';
 import { factLabel, formatFactValue } from '@/lib/knowledge/display';
+
+const DOMAIN_KEYS = DOMAINS.map((d) => d.key);
+const ALL_FACT_KEYS = DOMAINS.flatMap((d) => d.factTypes.map((ft) => ft.key));
 
 export const KNOWLEDGE_TOOLS: Tool[] = [
   {
@@ -35,17 +38,44 @@ export const KNOWLEDGE_TOOLS: Tool[] = [
       },
     },
   },
+  {
+    name: 'capture_fact',
+    description:
+      'Record a durable personal-finance fact the user states in conversation (e.g. "my rent is 2400", "my 401k match is 4%"). Only use it for stable facts about the user, not one-off transactions or questions. The fact is saved as pending and the user confirms it in their review queue before Beacon relies on it, so never treat it as confirmed in your reply. Do not capture Social Security numbers or account numbers.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        domain: { type: 'string', enum: DOMAIN_KEYS, description: 'The domain this fact belongs to.' },
+        key: { type: 'string', enum: ALL_FACT_KEYS, description: 'The specific fact type key within that domain.' },
+        value: { type: 'string', description: 'The value as the user stated it (e.g. "2400", "4%"). It is normalized on save.' },
+      },
+      required: ['domain', 'key', 'value'],
+    },
+  },
 ];
 
 export function isKnowledgeTool(name: string): boolean {
-  return name === 'search_facts' || name === 'get_document';
+  return name === 'search_facts' || name === 'get_document' || name === 'capture_fact';
 }
 
 export async function handleKnowledgeTool(userId: string, name: string, input: unknown): Promise<string> {
-  const args = (input ?? {}) as { query?: string; domain?: string; documentId?: string };
+  const args = (input ?? {}) as { query?: string; domain?: string; documentId?: string; key?: string; value?: string };
   if (name === 'search_facts') return searchFacts(userId, args.query, args.domain);
   if (name === 'get_document') return getDocument(userId, args.documentId);
+  if (name === 'capture_fact') return captureFact(userId, args.domain, args.key, args.value);
   return `Unknown tool: ${name}`;
+}
+
+async function captureFact(userId: string, domain?: string, key?: string, value?: string): Promise<string> {
+  if (!domain || !key || value === undefined || value === '') {
+    return 'Could not save: need a domain, a fact key, and a value.';
+  }
+  const result = await commitFacts(userId, [{ domain, key, value, source: 'chat' }]);
+  if (result.committed === 0) {
+    const why = result.rejected[0]?.error ?? 'it did not match a known fact type';
+    return `Could not save that fact: ${why}. Do not tell the user it was saved.`;
+  }
+  return 'Saved as a pending fact. Tell the user you have noted it and they can confirm it in their review queue. Do not treat it as confirmed yet.';
 }
 
 async function searchFacts(userId: string, query?: string, domain?: string): Promise<string> {

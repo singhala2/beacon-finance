@@ -5,6 +5,8 @@ import { UploadCard } from '@/components/knowledge/UploadCard';
 import { DOMAINS, getFactType, type FactType, type MarginalWeight } from '@/lib/knowledge/registry';
 import { getConfirmedFacts, getFactsByStatus } from '@/lib/knowledge/facts';
 import { factLabel, formatFactValue } from '@/lib/knowledge/display';
+import { getStaleFacts, detectConflicts } from '@/lib/knowledge/lifecycle';
+import { AddFactChip } from '@/components/knowledge/AddFactChip';
 
 // Phase 8 (8D) — the Knowledge Hub, rendered generically from the registry.
 // Every domain here comes from DOMAINS × the user's confirmed facts. Adding a
@@ -27,9 +29,11 @@ export default async function KnowledgePage() {
   if (!session?.user?.id) return null;
   const userId = session.user.id;
 
-  const [confirmed, pending] = await Promise.all([
+  const [confirmed, pending, stale, conflicts] = await Promise.all([
     getConfirmedFacts(userId),
     getFactsByStatus(userId, 'pending'),
+    getStaleFacts(userId),
+    detectConflicts(userId),
   ]);
 
   // Group confirmed facts by domain.
@@ -79,6 +83,45 @@ export default async function KnowledgePage() {
         </div>
       )}
 
+      {conflicts.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <Card>
+            <CardHeader eyebrow="Worth a look" />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {conflicts.map((c, i) => (
+                <div key={i} style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  You confirmed <span style={{ color: 'var(--color-text)' }}>{c.label}</span> as{' '}
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text)' }}>{c.confirmedValue}</span>, but your{' '}
+                  {c.otherSource} data shows{' '}
+                  <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-warn)' }}>{c.otherValue}</span>.
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {stale.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <Link href="/knowledge/review" style={{ textDecoration: 'none' }}>
+            <Card>
+              <CardHeader eyebrow="Worth re-checking" />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {stale.map((s) => (
+                  <div key={s.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 13 }}>
+                    <span style={{ color: 'var(--color-text-muted)', flex: 1 }}>{s.label}</span>
+                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--color-text)' }}>{s.displayValue}</span>
+                    <span style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      {s.reason === 'expired' ? 'expired' : 'may be dated'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </Link>
+        </div>
+      )}
+
       {/* Populated domains: the confirmed facts, plus an open invitation to add more. */}
       {populated.map((domain) => {
         const facts = byDomain.get(domain.key) ?? [];
@@ -113,7 +156,7 @@ export default async function KnowledgePage() {
                   );
                 })}
               </div>
-              {more.length > 0 && <AddMore items={more} />}
+              {more.length > 0 && <AddMore domain={domain.key} items={more} />}
             </Card>
           </div>
         );
@@ -131,7 +174,7 @@ export default async function KnowledgePage() {
                   <div style={{ fontSize: 13, color: 'var(--color-text)', marginBottom: 4 }}>{domain.label}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {more.map((ft) => (
-                      <SuggestionChip key={ft.key} label={ft.label} />
+                      <AddFactChip key={ft.key} domain={domain.key} factKey={ft.key} label={ft.label} />
                     ))}
                   </div>
                 </div>
@@ -144,7 +187,7 @@ export default async function KnowledgePage() {
   );
 }
 
-function AddMore({ items }: { items: FactType[] }) {
+function AddMore({ domain, items }: { domain: string; items: FactType[] }) {
   return (
     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--color-line)' }}>
       <div style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
@@ -152,29 +195,9 @@ function AddMore({ items }: { items: FactType[] }) {
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {items.map((ft) => (
-          <SuggestionChip key={ft.key} label={ft.label} />
+          <AddFactChip key={ft.key} domain={domain} factKey={ft.key} label={ft.label} />
         ))}
       </div>
     </div>
-  );
-}
-
-function SuggestionChip({ label }: { label: string }) {
-  return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        height: 26,
-        padding: '0 10px',
-        fontSize: 12,
-        color: 'var(--color-text-muted)',
-        background: 'var(--color-bg-3)',
-        border: '1px solid var(--color-line)',
-        borderRadius: 'var(--radius-sm)',
-      }}
-    >
-      {label}
-    </span>
   );
 }

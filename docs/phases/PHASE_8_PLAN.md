@@ -34,7 +34,7 @@ Each is independently shippable. Commit and push after each.
 | 8C | Confirmation queue | Extracted/chat facts show next to their source snippet. Confirm / edit / reject each. Confirm commits + supersedes; reject marks rejected. | ✅ done |
 | 8D | Knowledge Hub page — domain-organized | `/knowledge` renders domains generically from the registry × the user's confirmed facts. Ever-present, un-scored "Add more" affordance per domain with `marginalWeight`-driven suggestions. A new registry domain appears with zero new page code. | ✅ done |
 | 8E | Chat integration | Per-domain summarizers render confirmed facts into compact blocks. Priority-budgeted assembly fills the system-prompt context budget by `marginalWeight`. `search_facts` / `get_document` retrieval tools for the long tail. The agent can request a document mid-conversation when it hits a gap. | ✅ done |
-| 8F | Additional sources + lifecycle | Manual entry + conversational fact capture adapters (same commit path). Staleness re-verification invitations and Plaid-vs-fact conflict surfacing. | not started |
+| 8F | Additional sources + lifecycle | Manual entry + conversational fact capture adapters (same commit path). Staleness re-verification invitations and Plaid-vs-fact conflict surfacing. | ✅ done |
 
 ## Database schema additions (`prisma/schema.prisma`)
 
@@ -129,4 +129,9 @@ Append findings, deviations from plan, and decisions made during execution under
 - **Verification**: `tsc` clean; full `pnpm build` clean (compiles the modified route + system prompt + tools together); Prisma probe confirmed the knowledge tables + new `sourceExcerpt` column query end to end. **Not driven live here**: an authenticated chat turn hitting Anthropic needs a browser session this unattended run cannot create. Manual check for the user: ask Beacon something only a confirmed fact knows (e.g. gross salary) and confirm normal chat is unaffected. The loop is bounded and read-only, so worst case is an extra tool round, never a bank write.
 
 ### 8F notes
-_(empty)_
+
+- **Conversational capture** `capture_fact` tool added to `KNOWLEDGE_TOOLS` (8E loop). When the user states a durable fact in chat ("my rent is 2400"), the agent maps it to a registry domain/key (both provided as enums so it stays valid) and it commits through `commitFacts` as `source: 'chat'` → lands **pending**. The tool result explicitly tells the agent not to claim it is confirmed, so truth still gates on the review queue.
+- **Manual entry** `POST /api/knowledge/facts` → `commitFacts(source: 'manual')` → pending. UI: `components/knowledge/AddFactChip.tsx` turns every Hub suggestion chip (populated "could still use" and empty-domain invites) into an inline input; saving posts and refreshes. Same commit path, no new truth logic.
+- **Staleness** `lib/knowledge/lifecycle.ts` `getStaleFacts`: confirmed live facts that are past `expiresAt` (`expired`) or older than 180 days (`aging`). Surfaced as a "Worth re-checking" Hub card linking to the review queue. No facts are stale yet (all fresh), so the card is dormant until facts age; logic verified by reading.
+- **Plaid-vs-fact conflict** `detectConflicts`: finds keys where a user-confirmed fact (document/chat/manual) disagrees with a Plaid/system-derived fact of the same key, surfaced as a "Worth a look" Hub card. **Dormant by design**: nothing writes `plaid`/`system` facts yet (an aggregator/derivation writer is explicitly out of Phase 8 scope), so it returns nothing today but lights up automatically once derived facts land in the ledger. Shipping the detector + surface now means that writer needs zero Hub changes later.
+- All four adapters/detectors are read-only to banks and route every write through the single `commitFacts` path. Verified: `tsc` + full `pnpm build` clean. Live chat `capture_fact` and the aged-fact/conflict cards need real data + a session to see populated; the code paths are build- and type-verified and exercised structurally.
