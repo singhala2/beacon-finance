@@ -1,0 +1,23 @@
+ACME ROBOTICS INC.
+Earnings Statement
+
+Employee: Jordan Rivera
+Pay Period: 06/01/2026 - 06/15/2026
+Pay Date: 06/20/2026
+Pay Frequency: Biweekly
+
+EARNINGS
+  Regular (Gross pay this period) .......... $3,269.23
+  Gross Annual Salary ...................... $85,000.00
+
+DEDUCTIONS / WITHHOLDINGS
+  Federal Income Tax ....................... $412.00
+  401(k) Contribution (this period) ........ $196.15
+  Health Insurance Premium ................. $142.30
+
+NET PAY (this period) ...................... $2,518.78
+
+Employer 401(k) Match: 4% of eligible pay
+
+This is fictional sample data for testing the Knowledge Hub document pipeline.
+No real person or account is represented.
