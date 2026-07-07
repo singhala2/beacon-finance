@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
+import { log } from './logger';
 
 type LimitResult = {
   success: boolean;
@@ -36,8 +37,15 @@ function make(prefix: string, count: number, window: Window): Limiter {
   });
   return {
     async limit(key) {
-      const r = await rl.limit(key);
-      return { success: r.success, limit: r.limit, remaining: r.remaining, reset: r.reset };
+      try {
+        const r = await rl.limit(key);
+        return { success: r.success, limit: r.limit, remaining: r.remaining, reset: r.reset };
+      } catch (err) {
+        // Fail open: a rate limiter must never take down the route it guards.
+        // If Upstash is unreachable (DNS/network/outage), allow the request.
+        log.error('rate limiter unavailable, failing open', { err, prefix });
+        return { success: true, limit: count, remaining: count, reset: Date.now() };
+      }
     },
   };
 }
