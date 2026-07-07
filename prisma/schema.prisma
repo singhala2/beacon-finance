@@ -48,6 +48,8 @@ model User {
   conversations     Conversation[]
   insights          Insight[]
   auditLogs         AuditLog[]
+  documents         Document[]
+  knowledgeFacts    KnowledgeFact[]
 }
 
 model Insight {
@@ -243,4 +245,54 @@ model AuditLog {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt(sort: Desc)])
+}
+
+// Phase 8 — Knowledge Hub.
+// A source document the user uploaded (pay stub, offer letter, etc.).
+// Facts are extracted from it; the document is provenance behind those facts.
+model Document {
+  id          String    @id @default(cuid())
+  userId      String
+  type        String    // registry DocumentType key: pay_stub | offer_letter | ...
+  filename    String
+  mimeType    String
+  blobUrl     String    @db.Text // encrypted storage reference
+  status      String    @default("processing") // processing | ready | failed
+  error       String?   @db.Text
+  uploadedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  facts KnowledgeFact[]
+
+  @@index([userId, uploadedAt])
+}
+
+// Phase 8 — the fact ledger. The unit of value in the Knowledge Hub.
+// Flexible-but-typed: domain + key are validated against lib/knowledge/registry.ts
+// at the app layer, so new fact types never need a migration.
+model KnowledgeFact {
+  id             String    @id @default(cuid())
+  userId         String
+  domain         String    // registry Domain key: income | debt | retirement | ...
+  key            String    // registry FactType key: gross_annual_salary | ...
+  valueJson      Json      // the typed value payload
+  valueType      String    // money | text | enum | date | number | boolean
+  source         String    // document | chat | manual | plaid | system
+  documentId     String?
+  confidence     Float?    // 0..1; null for user-entered
+  status         String    @default("pending") // pending | confirmed | rejected
+  effectiveDate  DateTime?
+  expiresAt      DateTime?
+  supersededById String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  document     Document?       @relation(fields: [documentId], references: [id], onDelete: SetNull)
+  supersededBy KnowledgeFact?  @relation("Supersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   KnowledgeFact[] @relation("Supersession")
+
+  @@index([userId, domain, status])
+  @@index([userId, key, status])
 }

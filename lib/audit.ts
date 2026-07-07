@@ -13,7 +13,12 @@ export type AuditAction =
   | 'goal.delete'
   | 'settings.profile.update'
   | 'data.export'
-  | 'account.delete';
+  | 'account.delete'
+  | 'knowledge.document.upload'
+  | 'knowledge.document.delete'
+  | 'knowledge.fact.commit'
+  | 'knowledge.fact.confirm'
+  | 'knowledge.fact.reject';
 
 type LogAuditArgs = {
   userId: string;

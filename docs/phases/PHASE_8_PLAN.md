@@ -29,7 +29,7 @@ Each is independently shippable. Commit and push after each.
 
 | #  | Milestone | Acceptance | Status |
 |----|-----------|------------|--------|
-| 8A | Fact ledger + domain registry (scalable core) | `KnowledgeFact` + `Document` models. `lib/knowledge/registry.ts` declares domains, fact types, and document types as metadata with per-fact `marginalWeight`. `lib/knowledge/facts.ts` is the single commit path: validates every fact against the registry, persists, supersedes prior confirmed facts on confirm, and audit-logs. No UI yet. | next |
+| 8A | Fact ledger + domain registry (scalable core) | `KnowledgeFact` + `Document` models. `lib/knowledge/registry.ts` declares domains, fact types, and document types as metadata with per-fact `marginalWeight`. `lib/knowledge/facts.ts` is the single commit path: validates every fact against the registry, persists, supersedes prior confirmed facts on confirm, and audit-logs. No UI yet. | ✅ done |
 | 8B | Document upload + schema-driven extraction (Income slice) | Upload endpoint stores the file (encrypted blob ref), classifies against a registry document type, and runs one **generic** extractor that reads the doc type's `extractionFields` and calls Claude for typed JSON. PII redacted before persistence. Ships `pay_stub` + `offer_letter`. Facts land in the ledger as `pending`. | not started |
 | 8C | Confirmation queue | Extracted/chat facts show next to their source snippet. Confirm / edit / reject each. Confirm commits + supersedes; reject marks rejected. | not started |
 | 8D | Knowledge Hub page — domain-organized | `/knowledge` renders domains generically from the registry × the user's confirmed facts. Ever-present, un-scored "Add more" affordance per domain with `marginalWeight`-driven suggestions. A new registry domain appears with zero new page code. | not started |
@@ -83,7 +83,13 @@ Out of scope for Phase 8:
 Append findings, deviations from plan, and decisions made during execution under each milestone heading.
 
 ### 8A notes
-_(to be filled during the build)_
+
+- Schema applied via `pnpm db:push` (project has no migrations dir). `Document` and `KnowledgeFact` tables live on Neon; `User` gets `documents` + `knowledgeFacts` back-relations.
+- `KnowledgeFact` supersession is tracked by a `supersededById` pointer, not a status value. "Live" facts are `status = confirmed AND supersededById = null` — that is what `getConfirmedFacts` returns and what chat/Hub will read.
+- `commitFacts` validates every input against the registry and returns the invalid ones rather than throwing, so one bad extracted field never discards the good fields beside it. `plaid`/`system` sources auto-confirm (and supersede immediately); `document`/`chat`/`manual` land `pending`.
+- Value normalization lives in `validateFactValue` (registry): strips `$ , %` from money/number, coerces dates to ISO, checks enum membership. Verified: `"$85,000"` → `85000`; enum rejects out-of-set values.
+- Registry invariant checked at build time: every `DocumentType.extractionField.factKey` resolves to a real `FactType` of the same `valueType` in its declared domain. A mismatch here would silently drop extractions in 8B, so re-run that check when adding document types.
+- `AuditAction` extended with five `knowledge.*` actions; every fact mutation is audit-logged (Phase 7B).
 
 ### 8B notes
 _(empty)_
