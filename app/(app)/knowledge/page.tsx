@@ -1,27 +1,52 @@
 import Link from 'next/link';
 import { auth } from '@/lib/auth';
-import { db } from '@/lib/db';
-import { Card, CardHeader, CardEmptyState } from '@/components/dashboard/Card';
+import { Card, CardHeader } from '@/components/dashboard/Card';
 import { UploadCard } from '@/components/knowledge/UploadCard';
-import { getDocumentType } from '@/lib/knowledge/registry';
-import { getFactsByStatus } from '@/lib/knowledge/facts';
+import { DOMAINS, getFactType, type FactType, type MarginalWeight } from '@/lib/knowledge/registry';
+import { getConfirmedFacts, getFactsByStatus } from '@/lib/knowledge/facts';
+import { factLabel, formatFactValue } from '@/lib/knowledge/display';
 
-// Phase 8 (8B) — minimal Knowledge Hub. Upload + recent documents so the
-// extraction pipeline is testable end to end. 8D turns this into the
-// domain-organized Hub; 8C adds the confirmation queue.
+// Phase 8 (8D) — the Knowledge Hub, rendered generically from the registry.
+// Every domain here comes from DOMAINS × the user's confirmed facts. Adding a
+// new domain or fact type is a registry declaration; this page does not change.
+// No completeness score: suggestions are open invitations ranked by marginal
+// utility, never progress toward a target.
+
+const WEIGHT_ORDER: Record<MarginalWeight, number> = { high: 0, medium: 1, low: 2 };
+
+const SOURCE_LABEL: Record<string, string> = {
+  document: 'Document',
+  chat: 'Chat',
+  manual: 'Manual',
+  plaid: 'Plaid',
+  system: 'Beacon',
+};
+
 export default async function KnowledgePage() {
   const session = await auth();
   if (!session?.user?.id) return null;
   const userId = session.user.id;
 
-  const [documents, pending] = await Promise.all([
-    db.document.findMany({
-      where: { userId },
-      orderBy: { uploadedAt: 'desc' },
-      select: { id: true, type: true, filename: true, status: true, uploadedAt: true },
-    }),
+  const [confirmed, pending] = await Promise.all([
+    getConfirmedFacts(userId),
     getFactsByStatus(userId, 'pending'),
   ]);
+
+  // Group confirmed facts by domain.
+  const byDomain = new Map<string, typeof confirmed>();
+  for (const f of confirmed) {
+    const arr = byDomain.get(f.domain) ?? [];
+    arr.push(f);
+    byDomain.set(f.domain, arr);
+  }
+
+  const suggestions = (factTypes: readonly FactType[], present: Set<string>): FactType[] =>
+    factTypes
+      .filter((ft) => !present.has(ft.key))
+      .sort((a, b) => WEIGHT_ORDER[a.marginalWeight] - WEIGHT_ORDER[b.marginalWeight]);
+
+  const populated = DOMAINS.filter((d) => (byDomain.get(d.key)?.length ?? 0) > 0);
+  const empty = DOMAINS.filter((d) => (byDomain.get(d.key)?.length ?? 0) === 0);
 
   return (
     <div style={{ maxWidth: 960 }}>
@@ -30,8 +55,8 @@ export default async function KnowledgePage() {
           Knowledge
         </h1>
         <p style={{ fontSize: 13, color: 'var(--color-text-muted)', margin: 0 }}>
-          Give Beacon context it cannot see through your accounts. Upload a document and Beacon pulls out
-          the facts for you to confirm.
+          Everything Beacon knows about you that your accounts cannot show. Upload a document or tell Beacon
+          in chat, and it all lands here, organized by what it is about.
         </p>
       </div>
 
@@ -54,47 +79,102 @@ export default async function KnowledgePage() {
         </div>
       )}
 
-      <Card>
-        <CardHeader
-          eyebrow="Documents"
-          trailing={
-            <span style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)' }}>
-              {documents.length} uploaded
-            </span>
-          }
-        />
-        {documents.length === 0 ? (
-          <CardEmptyState>Nothing yet. Upload a pay stub or offer letter to get started.</CardEmptyState>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {documents.map((doc) => (
-              <div
-                key={doc.id}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0' }}
-              >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 540, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {doc.filename}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)' }}>
-                    {getDocumentType(doc.type)?.label ?? doc.type} · {doc.uploadedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+      {/* Populated domains: the confirmed facts, plus an open invitation to add more. */}
+      {populated.map((domain) => {
+        const facts = byDomain.get(domain.key) ?? [];
+        const present = new Set(facts.map((f) => f.key));
+        const more = suggestions(domain.factTypes, present).slice(0, 4);
+        return (
+          <div key={domain.key} style={{ marginBottom: 12 }}>
+            <Card>
+              <CardHeader
+                eyebrow={domain.label}
+                trailing={
+                  <span style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)' }}>
+                    {facts.length} fact{facts.length === 1 ? '' : 's'}
+                  </span>
+                }
+              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {facts.map((f) => {
+                  const ft = getFactType(f.domain, f.key);
+                  return (
+                    <div key={f.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                      <span style={{ fontSize: 13, color: 'var(--color-text-muted)', flex: 1, minWidth: 0 }}>
+                        {factLabel(f.domain, f.key)}
+                      </span>
+                      <span style={{ fontSize: 14, fontFamily: 'var(--font-mono)', color: 'var(--color-text)' }}>
+                        {formatFactValue(f.valueType, f.valueJson, ft?.unit)}
+                      </span>
+                      <span style={{ fontSize: 10, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', width: 62, textAlign: 'right' }}>
+                        {SOURCE_LABEL[f.source] ?? f.source}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              {more.length > 0 && <AddMore items={more} />}
+            </Card>
+          </div>
+        );
+      })}
+
+      {/* Everything else: compact invitations. No domain is ever "done". */}
+      {empty.length > 0 && (
+        <Card>
+          <CardHeader eyebrow="Add more context" />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {empty.map((domain) => {
+              const more = suggestions(domain.factTypes, new Set<string>()).slice(0, 3);
+              return (
+                <div key={domain.key}>
+                  <div style={{ fontSize: 13, color: 'var(--color-text)', marginBottom: 4 }}>{domain.label}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {more.map((ft) => (
+                      <SuggestionChip key={ft.key} label={ft.label} />
+                    ))}
                   </div>
                 </div>
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontFamily: 'var(--font-mono)',
-                    color: doc.status === 'ready' ? 'var(--color-mint)' : doc.status === 'failed' ? 'var(--color-warn)' : 'var(--color-text-dim)',
-                    flexShrink: 0,
-                  }}
-                >
-                  {doc.status}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        )}
-      </Card>
+        </Card>
+      )}
     </div>
+  );
+}
+
+function AddMore({ items }: { items: FactType[] }) {
+  return (
+    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--color-line)' }}>
+      <div style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', marginBottom: 6 }}>
+        Beacon could still use
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {items.map((ft) => (
+          <SuggestionChip key={ft.key} label={ft.label} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SuggestionChip({ label }: { label: string }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        height: 26,
+        padding: '0 10px',
+        fontSize: 12,
+        color: 'var(--color-text-muted)',
+        background: 'var(--color-bg-3)',
+        border: '1px solid var(--color-line)',
+        borderRadius: 'var(--radius-sm)',
+      }}
+    >
+      {label}
+    </span>
   );
 }

@@ -32,7 +32,7 @@ Each is independently shippable. Commit and push after each.
 | 8A | Fact ledger + domain registry (scalable core) | `KnowledgeFact` + `Document` models. `lib/knowledge/registry.ts` declares domains, fact types, and document types as metadata with per-fact `marginalWeight`. `lib/knowledge/facts.ts` is the single commit path: validates every fact against the registry, persists, supersedes prior confirmed facts on confirm, and audit-logs. No UI yet. | ✅ done |
 | 8B | Document upload + schema-driven extraction (Income slice) | Upload endpoint stores the file (encrypted blob ref), classifies against a registry document type, and runs one **generic** extractor that reads the doc type's `extractionFields` and calls Claude for typed JSON. PII redacted before persistence. Ships `pay_stub` + `offer_letter`. Facts land in the ledger as `pending`. | ✅ done |
 | 8C | Confirmation queue | Extracted/chat facts show next to their source snippet. Confirm / edit / reject each. Confirm commits + supersedes; reject marks rejected. | ✅ done |
-| 8D | Knowledge Hub page — domain-organized | `/knowledge` renders domains generically from the registry × the user's confirmed facts. Ever-present, un-scored "Add more" affordance per domain with `marginalWeight`-driven suggestions. A new registry domain appears with zero new page code. | not started |
+| 8D | Knowledge Hub page — domain-organized | `/knowledge` renders domains generically from the registry × the user's confirmed facts. Ever-present, un-scored "Add more" affordance per domain with `marginalWeight`-driven suggestions. A new registry domain appears with zero new page code. | ✅ done |
 | 8E | Chat integration | Per-domain summarizers render confirmed facts into compact blocks. Priority-budgeted assembly fills the system-prompt context budget by `marginalWeight`. `search_facts` / `get_document` retrieval tools for the long tail. The agent can request a document mid-conversation when it hits a gap. | not started |
 | 8F | Additional sources + lifecycle | Manual entry + conversational fact capture adapters (same commit path). Staleness re-verification invitations and Plaid-vs-fact conflict surfacing. | not started |
 
@@ -112,7 +112,13 @@ Append findings, deviations from plan, and decisions made during execution under
 - Confirming supersedes any prior live fact with the same key (8A behavior), so re-uploading a newer pay stub and confirming replaces the old value rather than duplicating it.
 
 ### 8D notes
-_(empty)_
+
+- **`/knowledge` rebuilt as the domain-organized Hub.** It maps over `DOMAINS` × the user's `getConfirmedFacts`. A brand-new registry domain or fact type appears here with zero page changes — the generic-rendering invariant the plan asked for.
+- **Populated domains** render a Card per domain: each confirmed fact as `label · value · source`, value formatted by `formatFactValue` with the registry `unit` (e.g. `%`, `months`). Source shown as a small chip (Document / Chat / Manual / Plaid / Beacon).
+- **No completeness score.** Each populated domain ends with an un-scored "Beacon could still use" invitation listing the top unfilled fact types ranked by `marginalWeight` (high → medium → low). Domains with no facts collapse into one compact "Add more context" card so the page invites without nagging. No domain is ever "done".
+- **Suggestion chips are non-interactive in 8D** (open invitations). Manual entry that turns a chip into an editable fact is 8F; documents and chat already write through the confirm flow.
+- The minimal 8B documents list was dropped from the page: the Hub is a fact ledger, not a file cabinet (principle 3). Upload still lives at the top; a failed upload surfaces its error inline in `UploadCard`.
+- Verified generic-rendering by reading DOMAINS: income/retirement/debt/housing/insurance/taxes/benefits/household/goals/estate all render from declaration; only income + retirement have facts wired via 8B extraction so far.
 
 ### 8E notes
 _(empty)_
