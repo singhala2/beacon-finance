@@ -33,7 +33,7 @@ Each is independently shippable. Commit and push after each.
 | 8B | Document upload + schema-driven extraction (Income slice) | Upload endpoint stores the file (encrypted blob ref), classifies against a registry document type, and runs one **generic** extractor that reads the doc type's `extractionFields` and calls Claude for typed JSON. PII redacted before persistence. Ships `pay_stub` + `offer_letter`. Facts land in the ledger as `pending`. | ✅ done |
 | 8C | Confirmation queue | Extracted/chat facts show next to their source snippet. Confirm / edit / reject each. Confirm commits + supersedes; reject marks rejected. | ✅ done |
 | 8D | Knowledge Hub page — domain-organized | `/knowledge` renders domains generically from the registry × the user's confirmed facts. Ever-present, un-scored "Add more" affordance per domain with `marginalWeight`-driven suggestions. A new registry domain appears with zero new page code. | ✅ done |
-| 8E | Chat integration | Per-domain summarizers render confirmed facts into compact blocks. Priority-budgeted assembly fills the system-prompt context budget by `marginalWeight`. `search_facts` / `get_document` retrieval tools for the long tail. The agent can request a document mid-conversation when it hits a gap. | not started |
+| 8E | Chat integration | Per-domain summarizers render confirmed facts into compact blocks. Priority-budgeted assembly fills the system-prompt context budget by `marginalWeight`. `search_facts` / `get_document` retrieval tools for the long tail. The agent can request a document mid-conversation when it hits a gap. | ✅ done |
 | 8F | Additional sources + lifecycle | Manual entry + conversational fact capture adapters (same commit path). Staleness re-verification invitations and Plaid-vs-fact conflict surfacing. | not started |
 
 ## Database schema additions (`prisma/schema.prisma`)
@@ -121,7 +121,12 @@ Append findings, deviations from plan, and decisions made during execution under
 - Verified generic-rendering by reading DOMAINS: income/retirement/debt/housing/insurance/taxes/benefits/household/goals/estate all render from declaration; only income + retirement have facts wired via 8B extraction so far.
 
 ### 8E notes
-_(empty)_
+
+- **Inline context** `lib/knowledge/context.ts` `buildKnowledgeContext(userId, {budgetChars})`: renders confirmed facts into one compact "What you know about this user, confirmed by them" block, grouped by domain in registry order. **Priority-budgeted**: facts are admitted to a ~1600-char budget by `marginalWeight` (high → medium → low), so the facts Plaid cannot see win the space; a trailing note tells the model how many were omitted and to use `search_facts`. Returns `''` when there are no facts, so the prompt stays unchanged for users without any.
+- **System prompt** `lib/system-prompt.ts`: the block is injected after RISK PROFILE, before SPENDING, and the intro paragraph now tells the agent it can call `search_facts` / `get_document`, preferring the inline facts.
+- **Retrieval tools** `lib/knowledge/tools.ts`: `KNOWLEDGE_TOOLS` (`search_facts` by keyword/domain, `get_document` to list or fetch a redacted excerpt), `isKnowledgeTool`, `handleKnowledgeTool(userId, name, input)`. Generic domain/key/text selection; the contract can swap to vectors later without changing callers. All reads are scoped to the user.
+- **Chat route** `app/api/chat/route.ts` gained its **first tool loop** (chat had none before). It offers the tools each round and streams text deltas exactly as before; when a turn stops on `tool_use` it runs the handlers, feeds `tool_result`s back, and continues (bounded to 4 rounds; the final round drops tools to force a text answer). **The no-tool happy path is byte-for-byte the old behavior** — the model just now has tools available. Frontend unchanged (tool execution is fully server-side; `useChatStream` still only sees `delta`/`done`).
+- **Verification**: `tsc` clean; full `pnpm build` clean (compiles the modified route + system prompt + tools together); Prisma probe confirmed the knowledge tables + new `sourceExcerpt` column query end to end. **Not driven live here**: an authenticated chat turn hitting Anthropic needs a browser session this unattended run cannot create. Manual check for the user: ask Beacon something only a confirmed fact knows (e.g. gross salary) and confirm normal chat is unaffected. The loop is bounded and read-only, so worst case is an extra tool round, never a bank write.
 
 ### 8F notes
 _(empty)_

@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import { formatCurrency, labelForCategory } from './format';
+import { buildKnowledgeContext } from '@/lib/knowledge/context';
 
 const RISK_LABELS: Record<number, string> = {
   1: 'Conservative',
@@ -238,10 +239,14 @@ export async function buildSystemPrompt(userId: string): Promise<string> {
   const contextLine = ctx.onboardingContext
     ? `\nUser-supplied context: ${ctx.onboardingContext}\n`
     : '';
+  const knownFacts = await buildKnowledgeContext(userId);
+  const knownFactsBlock = knownFacts ? `\n${knownFacts}\n` : '';
 
   return `You are Beacon, a personal finance copilot for ${ctx.displayName}.
 
 You have read-only access to ${ctx.displayName}'s connected financial accounts. Always quote real numbers from the data below when relevant. Never fabricate balances, prices, transactions, or returns. If the user asks about something the data does not cover, say so plainly.
+
+You can also call the search_facts tool to look up details the user has confirmed about themselves (comp, loan terms, rent, benefits) that are not shown below, and get_document to see where a fact came from. Prefer the facts you are given here; reach for the tools only when you need something not present.
 
 CONNECTED ACCOUNTS:
 ${ctx.accountLines}
@@ -253,7 +258,7 @@ GOALS:
 ${ctx.goalLines}
 
 RISK PROFILE: ${ctx.riskLabel}
-${contextLine}
+${contextLine}${knownFactsBlock}
 SPENDING (LAST 30 DAYS):
 ${ctx.spendingLines}
 

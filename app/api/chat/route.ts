@@ -1,8 +1,10 @@
 import { z } from 'zod';
+import type { MessageParam, ToolUseBlock } from '@anthropic-ai/sdk/resources/messages';
 import { auth } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { anthropic, CHAT_MODEL } from '@/lib/anthropic';
 import { buildSystemPrompt } from '@/lib/system-prompt';
+import { KNOWLEDGE_TOOLS, handleKnowledgeTool, isKnowledgeTool } from '@/lib/knowledge/tools';
 import { log } from '@/lib/logger';
 import { chatLimit, tooManyRequests } from '@/lib/ratelimit';
 
@@ -90,18 +92,48 @@ export async function POST(req: Request) {
 
       let assembled = '';
       try {
-        const response = anthropic.messages.stream({
-          model: CHAT_MODEL,
-          max_tokens: MAX_TOKENS,
-          system: systemPrompt,
-          messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        });
+        // Agentic loop: the model may call read-only knowledge tools to pull
+        // confirmed facts or a document excerpt, then answer. A turn with no
+        // tool call streams its text exactly as before. The final round drops
+        // the tools so the model must produce a text answer.
+        const convo: MessageParam[] = messages.map((m) => ({ role: m.role, content: m.content }));
+        const MAX_TOOL_ROUNDS = 4;
 
-        for await (const event of response) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-            assembled += event.delta.text;
-            send({ type: 'delta', text: event.delta.text });
+        for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+          const lastRound = round === MAX_TOOL_ROUNDS - 1;
+          const response = anthropic.messages.stream({
+            model: CHAT_MODEL,
+            max_tokens: MAX_TOKENS,
+            system: systemPrompt,
+            messages: convo,
+            ...(lastRound ? {} : { tools: KNOWLEDGE_TOOLS }),
+          });
+
+          for await (const event of response) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              assembled += event.delta.text;
+              send({ type: 'delta', text: event.delta.text });
+            }
           }
+
+          const final = await response.finalMessage();
+          if (final.stop_reason !== 'tool_use') break;
+
+          const toolUses = final.content.filter((b): b is ToolUseBlock => b.type === 'tool_use');
+          if (toolUses.length === 0) break;
+
+          // Feed the tool calls and their results back for the next round.
+          convo.push({ role: 'assistant', content: final.content });
+          const results = await Promise.all(
+            toolUses.map(async (tu) => ({
+              type: 'tool_result' as const,
+              tool_use_id: tu.id,
+              content: isKnowledgeTool(tu.name)
+                ? await handleKnowledgeTool(userId, tu.name, tu.input)
+                : `Unknown tool: ${tu.name}`,
+            })),
+          );
+          convo.push({ role: 'user', content: results });
         }
 
         // Persist assistant turn after stream completes
